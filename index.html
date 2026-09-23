@@ -1140,7 +1140,7 @@ if (typeof settings.pin !== 'string') settings.pin = '';
 
 // 사용량 기록 (부모가 비용을 눈으로 확인할 수 있게)
 // 휴대폰에서 어느 버전이 돌아가는지 눈으로 확인할 수 있게 함 (설정 화면에 표시)
-var APP_VERSION = '2026-09-24 (28판)';
+var APP_VERSION = '2026-09-24 (29판)';
 
 var LS_USAGE = 'owl_usage_v1';
 var usage = loadJSON(LS_USAGE, {});
@@ -5981,6 +5981,7 @@ $('btn-import-books').addEventListener('click', function () {
 $('import-file-input').addEventListener('change', function () {
   var file = this.files && this.files[0];
   if (!file) return;
+  toast('파일을 읽고 있어요… 그림이 많으면 조금 걸려요', 4000);
   var fr = new FileReader();
   fr.onload = function () {
     var data;
@@ -5991,11 +5992,27 @@ $('import-file-input').addEventListener('change', function () {
     var incoming = Array.isArray(data) ? data : (data && Array.isArray(data.books) ? data.books : null);
     if (!incoming) { toast('책 데이터를 찾을 수 없는 파일이에요', 3000); return; }
 
-    var ids = {};
-    customBooks.forEach(function (b) { ids[b.id] = true; });
+    /* 같은 백업을 다시 가져와도 책이 두 배로 늘지 않게 함.
+       이미 있는 책이면 새로 만들지 않고, 예전에 저장 공간이 모자라 잘려나간 그림만 채워 넣는다. */
+    var ids = {}, byId = {}, byStory = {};
+    var filled = 0, filledWords = 0;
+    function storyKey(t) { return String(t || '').replace(/\s+/g, ' ').trim().slice(0, 60); }
+    customBooks.forEach(function (b) {
+      ids[b.id] = true;
+      byId[b.id] = b;
+      byStory[storyKey(b.story)] = b;
+    });
     var added = 0;
     incoming.forEach(function (b) {
       if (!b || !b.story || !b.title) return;       // 형태가 이상한 건 건너뜀
+      var ex = (b.id && byId[b.id]) || byStory[storyKey(b.story)];
+      if (ex) {
+        var did = 0;
+        if (b.cover && !ex.cover) { ex.cover = b.cover; ex.coverId = null; did = 1; }
+        if (b.scanHash && !ex.scanHash) { ex.scanHash = b.scanHash; did = 1; }
+        if (did) filled++;
+        return;                                      // 중복으로 또 만들지 않음
+      }
       if (!b.id || ids[b.id]) b.id = uid();          // 아이디가 겹치면 새로 발급(덮어쓰기 방지)
       b.coverId = null;                              // 그림 번호는 이 기기에서 새로 매김
       b.builtin = false;
@@ -6004,6 +6021,8 @@ $('import-file-input').addEventListener('change', function () {
       b.title = uniqueTitle(String(b.title).slice(0, 30));
       customBooks.push(b);
       ids[b.id] = true;
+      byId[b.id] = b;
+      byStory[storyKey(b.story)] = b;
       added++;
     });
     customBooks.sort(function (x, y) { return (y.createdAt || 0) - (x.createdAt || 0); });
@@ -6013,16 +6032,23 @@ $('import-file-input').addEventListener('change', function () {
     var addedWords = 0;
     if (data && Array.isArray(data.words)) {
       var have = {};
-      learnWords.forEach(function (c) { have[c.word] = 1; });
+      learnWords.forEach(function (c) { have[c.word] = c; });
       data.words.forEach(function (c) {
-        if (!c || !c.word || !c.story || have[c.word]) return;
+        if (!c || !c.word || !c.story) return;
+        var ex = have[c.word];
+        if (ex) {                                    // 이미 있는 낱말 — 빠진 것만 채움
+          if (c.cover && !ex.cover) { ex.cover = c.cover; ex.coverId = null; filledWords++; }
+          if (c.detail && !ex.detail) ex.detail = c.detail;
+          if (c.shelved && !ex.shelved) ex.shelved = true;
+          return;
+        }
         if (!c.id) c.id = uid();
         c.coverId = null;
         learnWords.push(c);
-        have[c.word] = 1;
+        have[c.word] = c;
         addedWords++;
       });
-      if (addedWords) {
+      if (addedWords || filledWords) {
         learnWords.sort(function (x, y) { return (y.createdAt || 0) - (x.createdAt || 0); });
         saveWords();
         renderWordShelf();
@@ -6047,7 +6073,8 @@ $('import-file-input').addEventListener('change', function () {
     renderShelf();
     toast((added ? '책 ' + added + '권' : '새 책 없음') +
           (addedWords ? ' · 낱말 ' + addedWords + '개' : '') + ' 가져왔어요!' +
-          (restored ? ' API 키와 설정도 복구했어요 — 성우가 다시 읽어줍니다' : ''), 5000);
+          ((filled + filledWords) ? ' 🖼️ 빠졌던 그림 ' + (filled + filledWords) + '장을 되살렸어요!' : '') +
+          (restored ? ' API 키와 설정도 복구했어요 — 성우가 다시 읽어줍니다' : ''), 6000);
   };
   fr.onerror = function () { toast('파일을 읽지 못했어요'); };
   fr.readAsText(file);
