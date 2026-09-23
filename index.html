@@ -640,7 +640,14 @@
       💡 <b>무료 한도가 자꾸 걸리면:</b> <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">AI Studio</a>에서
       <b>결제(Billing)를 연결</b>해 주세요. 구글이 정식으로 허용한 방법이고, 이 앱 사용량이면 보통 한 달에 몇천 원 수준이에요.<br><br>
       쉼표(,)로 키를 여러 개 이어 붙여 저장할 수도 있는데, 이건 <b>한도를 늘리는 용도가 아니라</b> 키 하나가 갑자기 막혔을 때를 대비한
-      <b>예비용</b>으로만 써주세요. (무료 한도를 늘리려고 프로젝트를 여러 개 만드는 건 구글 API 이용약관의 "한도 우회 금지" 조항에 걸릴 수 있어요.)
+      <b>예비용</b>으로만 써주세요. (무료 한도를 늘리려고 프로젝트를 여러 개 만드는 건 구글 API 이용약관의 "한도 우회 금지" 조항에 걸릴 수 있어요.)<br><br>
+      🔒 <b>키 안전하게 쓰기</b><br>
+      · 키는 이 폰 안에만 저장되고, 구글에 보낼 때도 주소가 아니라 <b>헤더</b>로만 보내요(기록에 안 남아요).<br>
+      · <b>백업 파일에 키가 들어갑니다.</b> 남에게 보내지 마세요 — 아래 "책 백업"에서 뺄 수도 있어요.<br>
+      · 키가 샌 것 같으면
+      <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">AI Studio</a>에서
+      <b>그 키를 지우고 새로 만드세요.</b> 지우는 즉시 옛 키는 못 쓰게 돼요.<br>
+      · 설정의 <b>요금 한도</b>를 꼭 정해 두세요. 혹시 키가 새도 피해가 거기서 멈춰요.
     </p>
   </div>
 
@@ -802,6 +809,16 @@
       <button class="btn ghost" id="btn-import-audio">🎧 음성 가져오기</button>
     </div>
     <input type="file" id="audio-file-input" accept=".owlaud,application/octet-stream" hidden>
+    <div style="font-size:14px; margin:14px 0 6px;">백업 파일에 API 키 넣기</div>
+    <div class="seg" id="seg-backupkey">
+      <button data-bkey="on">넣기 (폰 옮길 때 편함)</button>
+      <button data-bkey="off">빼기 (더 안전)</button>
+    </div>
+    <p class="hint" style="margin-top:6px;">
+      ⚠️ 키를 넣으면 새 폰에서 바로 성우가 나오지만,
+      <b>그 파일을 받은 사람은 누구나 부모님 요금으로 AI를 쓸 수 있어요.</b>
+      메일·단톡방·공유 폴더에 올리지 마시고, 옮기기가 끝나면 파일을 지워 주세요.
+    </p>
     <p class="hint" id="audio-move-hint" style="margin-top:6px;">
       사 둔 AI 성우 음성을 다른 휴대폰으로 옮길 때 써요. 파일이 아주 커요(책 한 권이 5~10MB).
     </p>
@@ -1152,7 +1169,7 @@ if (typeof settings.pin !== 'string') settings.pin = '';
 
 // 사용량 기록 (부모가 비용을 눈으로 확인할 수 있게)
 // 휴대폰에서 어느 버전이 돌아가는지 눈으로 확인할 수 있게 함 (설정 화면에 표시)
-var APP_VERSION = '2026-09-24 (32판)';
+var APP_VERSION = '2026-09-24 (33판)';
 
 var LS_USAGE = 'owl_usage_v1';
 var usage = loadJSON(LS_USAGE, {});
@@ -1331,6 +1348,8 @@ if (settings.learnHint !== 'off') settings.learnHint = 'on';
 // 원하는 것만 설정에서 유료(AI)로 올릴 수 있음. 저장 용량도 그만큼 안 먹음.
 if (settings.learnImage !== 'ai') settings.learnImage = 'free';
 if (settings.learnVoice !== 'ai') settings.learnVoice = 'device';
+// 백업 파일에 API 키를 같이 담을지. 담으면 새 폰에서 바로 되지만, 파일이 새면 남이 요금을 쓸 수 있음
+if (settings.backupKey !== 'off') settings.backupKey = 'on';
 
 /* ════════════════════════════════════════════
    유틸
@@ -2533,6 +2552,15 @@ function apiKeys() {
   return (settings.apiKey || '').split(/[\s,;]+/).filter(function (k) { return k.length > 10; });
 }
 var keyIdx = 0;
+/* 키를 주소(URL) 뒤에 붙이면 브라우저 방문기록·중간 서버 기록에 키가 그대로 남는다.
+   구글이 권하는 대로 헤더로만 보낸다 — 주소에는 키가 한 글자도 안 들어감. */
+function apiHeaders(extra) {
+  var h = { 'x-goog-api-key': apiKey() };
+  if (extra) for (var k in extra) if (Object.prototype.hasOwnProperty.call(extra, k)) h[k] = extra[k];
+  return h;
+}
+var JSON_HEAD = { 'Content-Type': 'application/json' };
+
 function apiKey() {
   var ks = apiKeys();
   if (!ks.length) return '';
@@ -2557,7 +2585,8 @@ function ensureModels() {
     }
   } catch (e) {}
   if (!apiKey()) return Promise.resolve(null);
-  return fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000&key=' + encodeURIComponent(apiKey()))
+  return fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000',
+               { headers: apiHeaders() })
     .then(function (r) { return r.ok ? r.json() : null; })
     .then(function (j) {
       if (!j || !j.models || !j.models.length) return null;
@@ -2672,10 +2701,10 @@ function geminiFetch(model, body, signal, onProgress, maxRetry) {
 
   function attemptOnce(attempt) {
     var url = 'https://generativelanguage.googleapis.com/v1beta/models/' + model +
-              ':generateContent?key=' + encodeURIComponent(apiKey());
+              ':generateContent';
     return fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: apiHeaders(JSON_HEAD),
       body: JSON.stringify(body),
       signal: signal
     }).then(function (res) {
@@ -3243,10 +3272,10 @@ function streamTTSRequest(text, abortCtrl, onPcm, onDone, onErr) {
   };
   function doFetch() {
   var url = 'https://generativelanguage.googleapis.com/v1beta/models/' + ttsModel() +
-            ':streamGenerateContent?alt=sse&key=' + encodeURIComponent(apiKey());
+            ':streamGenerateContent?alt=sse';
   return fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: apiHeaders(JSON_HEAD),
     body: JSON.stringify(body),
     signal: abortCtrl.signal
   }).then(function (res) {
@@ -3933,10 +3962,10 @@ function streamTextRequest(parts, abortCtrl, onDelta, onDone, onErr, onStatus) {
       body.generationConfig.thinkingConfig = { thinkingBudget: 0 };
     }
     var url = 'https://generativelanguage.googleapis.com/v1beta/models/' + model +
-              ':streamGenerateContent?alt=sse&key=' + encodeURIComponent(apiKey());
+              ':streamGenerateContent?alt=sse';
     fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: apiHeaders(JSON_HEAD),
       body: JSON.stringify(body),
       signal: abortCtrl.signal
     }).then(function (res) {
@@ -5315,6 +5344,10 @@ function renderSettings() {
   for (var p4 = 0; p4 < lvo.length; p4++) {
     lvo[p4].classList.toggle('on', lvo[p4].dataset.lvoice === (settings.learnVoice || 'device'));
   }
+  var bky = $('seg-backupkey').querySelectorAll('button');
+  for (var p5 = 0; p5 < bky.length; p5++) {
+    bky[p5].classList.toggle('on', bky[p5].dataset.bkey === (settings.backupKey || 'on'));
+  }
   renderOrigin();
   renderUsage();
   if (document.activeElement !== $('inp-budget')) {
@@ -5678,6 +5711,14 @@ $('seg-learnimage').addEventListener('click', function (e) {
   renderSettings();
 });
 
+$('seg-backupkey').addEventListener('click', function (e) {
+  var b = e.target.closest('button');
+  if (!b) return;
+  settings.backupKey = b.dataset.bkey === 'off' ? 'off' : 'on';
+  saveJSON(LS_SETTINGS, settings);
+  renderSettings();
+});
+
 $('seg-learnvoice').addEventListener('click', function (e) {
   var b = e.target.closest('button');
   if (!b) return;
@@ -5758,8 +5799,8 @@ $('btn-key-test').addEventListener('click', function () {
       if (voice) gen.speechConfig = { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } };
       var body = { contents: [{ parts: [{ text: '안녕' }] }], generationConfig: gen };
       return fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model +
-                   ':generateContent?key=' + encodeURIComponent(apiKey()), {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+                   ':generateContent', {
+        method: 'POST', headers: apiHeaders(JSON_HEAD), body: JSON.stringify(body)
       }).then(function (res) {
         return res.json().catch(function () { return {}; }).then(function (j) {
           if (res.ok) {
@@ -5856,10 +5897,10 @@ $('btn-key-test').addEventListener('click', function () {
           return;
         }
         var url = 'https://generativelanguage.googleapis.com/v1beta/models/' + candidates[ci] +
-                  ':generateContent?key=' + encodeURIComponent(ks[i]);
+                  ':generateContent';
         fetch(url, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'x-goog-api-key': ks[i], 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: [{ parts: [{ text: '안녕' }] }],
             generationConfig: { maxOutputTokens: 5 }
@@ -5986,7 +6027,7 @@ function doExportBooks() {
       childName: settings.childName,
       // 주소가 바뀌면 API 키까지 날아가서 성우가 멈춤 → 설정도 같이 담아둠
       settings: {
-        apiKey: settings.apiKey, childName: settings.childName,
+        apiKey: (settings.backupKey === 'off' ? '' : settings.apiKey), childName: settings.childName,
         voiceMode: settings.voiceMode, aiVoice: settings.aiVoice, rate: settings.rate,
         camMode: settings.camMode, coverMode: settings.coverMode,
         branchMode: settings.branchMode, budgetKRW: settings.budgetKRW
@@ -6004,7 +6045,9 @@ function doExportBooks() {
     a.click();
     document.body.removeChild(a);
     setTimeout(function () { try { URL.revokeObjectURL(url); } catch (e) {} }, 3000);
-    toast('책 ' + customBooks.length + '권 · 낱말 ' + learnWords.length + '개를 그림까지 저장했어요 📤', 4000);
+    toast('책 ' + customBooks.length + '권 · 낱말 ' + learnWords.length + '개를 그림까지 저장했어요 📤' +
+          (settings.backupKey === 'off' ? ' (API 키는 빼고요)'
+                                        : ' ⚠️ 이 파일엔 API 키가 들어 있어요 — 남에게 보내지 마세요'), 6000);
   } catch (e) {
     toast('내보내기에 실패했어요');
   }
