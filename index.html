@@ -171,7 +171,7 @@
     font-size: 24px; padding: 12px 18px; border-radius: 16px; border: none;
     background: var(--sun); box-shadow: 0 3px 0 #D5A418;
   }
-  #pad-wrap { padding: 0 12px; }
+  #pad-wrap { padding: 0 10px; }
   .trace-row { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-bottom: 8px; }
   .tchip {
     font-family: var(--font-ui); font-size: 14px; padding: 8px 13px;
@@ -179,8 +179,36 @@
     background: rgba(255,255,255,0.7); color: var(--ink);
   }
   .tchip.on { background: var(--sun); border-color: #D5A418; }
+  /* 쓰기판을 최대한 크게 — 아이 손가락이 편하게 움직일 자리 */
+  #pad-head {
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    margin-bottom: 6px; min-height: 46px;
+  }
+  #pad-head .ph-emoji { font-size: 34px; line-height: 1; }
+  #pad-head .ph-word {
+    font-family: var(--font-ui); font-size: 30px; letter-spacing: 2px; color: var(--ink);
+  }
+  #pad-head button {
+    font-family: var(--font-ui); font-size: 20px; padding: 7px 11px;
+    border-radius: 12px; border: none; background: rgba(255,255,255,0.9);
+    box-shadow: 0 2px 0 rgba(65,53,92,0.18);
+  }
+  #pad-tag {
+    font-size: 12px; color: var(--ink-soft); margin-bottom: 4px; min-height: 16px;
+  }
+  /* 무엇을 공부할지 고르는 창 */
+  .sheet-grid { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 6px; }
+  .sheet-grid button {
+    font-family: var(--font-ui); width: 86px; padding: 10px 4px;
+    border-radius: 16px; border: 3px solid transparent; background: #F3EFFA; color: var(--ink);
+    font-size: 30px; line-height: 1.15;
+  }
+  .sheet-grid button span { display: block; font-size: 12px; margin-top: 4px; color: var(--ink-soft); }
+  .sheet-grid button.on { border-color: #D5A418; background: var(--sun); }
+  .sheet-grid button.on span { color: #6B4E00; }
+  .sheet-sec { font-size: 13px; color: var(--ink-soft); margin: 10px 0 4px; }
   #learn-pad {
-    display: block; width: 100%; height: 36vh; min-height: 250px;
+    display: block; width: 100%; height: 52vh; min-height: 320px;
     background: #FFFFFF; border-radius: 18px;
     border: 3px dashed rgba(65,53,92,0.28);
     touch-action: none;   /* 손가락으로 그릴 때 화면이 같이 안 밀리게 */
@@ -201,7 +229,8 @@
     background: none; border: none; text-decoration: underline;
   }
   #learn-msg { min-height: 24px; margin-top: 10px; padding: 0 26px; font-size: 15px; line-height: 1.7; color: #B3541E; word-break: keep-all; }
-  #word-shelf .book .del { display: flex; }                      /* 홈 목록은 바로 지우기 가능 */
+  /* 모은 낱말은 아이의 수집품 — 지우기는 책장에서 "정리"를 눌렀을 때만 */
+  #word-shelf .book .del { display: none; }
   /* 책장의 낱말은 평소엔 보호되고, 부모가 “정리”를 누른 동안에만 지울 수 있음 (이야기책과 동일) */
   #shelf-words.editing .book .del { display: flex; }
   .book .upg {
@@ -522,13 +551,14 @@
       <div id="pad-wrap">
         <div class="trace-row" id="trace-row">
           <button class="tchip on" data-tr="off">✍️ 직접 쓰기</button>
-          <button class="tchip" data-tr="ja">ㄱㄴㄷ</button>
-          <button class="tchip" data-tr="mo">ㅏㅑㅓ</button>
-          <button class="tchip" data-tr="ga">가나다</button>
-          <button class="tchip" data-tr="ani">🐯 동물</button>
-          <button class="tchip" data-tr="fruit">🍎 과일</button>
-          <button class="tchip" data-tr="ride">🚗 탈것</button>
-          <button class="tchip" data-tr="quiz">🎯 문제</button>
+          <button class="tchip" id="btn-pick-cat">📋 골라서 공부</button>
+        </div>
+        <div id="pad-tag"></div>
+        <div id="pad-head" hidden>
+          <span class="ph-emoji" id="ph-emoji"></span>
+          <span class="ph-word" id="ph-word"></span>
+          <button id="btn-stroke" aria-label="획순 보기" hidden>✏️</button>
+          <button id="btn-hear" aria-label="다시 듣기" hidden>🔊</button>
         </div>
         <canvas id="learn-pad"></canvas>
         <div class="pad-btns">
@@ -723,6 +753,15 @@
       <button data-limg="free">이모지 (무료)</button>
       <button data-limg="ai">AI 그림 (유료)</button>
     </div>
+    <div style="font-size:14px; margin:14px 0 6px;">3단계 성공 상품</div>
+    <div class="seg" id="seg-rewardai">
+      <button data-rai="on">AI 그림 (유료)</button>
+      <button data-rai="off">이모지 (무료)</button>
+    </div>
+    <p class="hint" style="margin-top:6px;">
+      듣고 쓰기(3단계)를 맞히면 그 낱말 그림을 AI가 예쁘게 그려줘요(한 장에 약 50원).
+      돈이 나가는 게 부담되면 "이모지"로 두세요 — 그래도 카드는 모아져요.
+    </p>
     <div style="font-size:14px; margin:14px 0 6px;">낱말 목소리</div>
     <div class="seg" id="seg-learnvoice">
       <button data-lvoice="device">기기 목소리 (무료)</button>
@@ -936,6 +975,35 @@
 <div class="imgview" id="imgview" hidden>
   <img id="imgview-img" alt="">
   <button class="imgview-x" id="imgview-x" aria-label="닫기">✕</button>
+</div>
+
+<div class="lock" id="cat-sheet">
+  <div class="lock-card" style="max-width:360px;">
+    <div class="lock-emoji">📋</div>
+    <h2 class="lock-title">무엇을 공부할까?</h2>
+    <div class="sheet-sec">한글</div>
+    <div class="sheet-grid" id="cat-row1">
+      <button data-cat="ja">ㄱ<span>자음</span></button>
+      <button data-cat="mo">ㅏ<span>모음</span></button>
+      <button data-cat="ga">가<span>글자</span></button>
+    </div>
+    <div class="sheet-sec">낱말</div>
+    <div class="sheet-grid" id="cat-row2">
+      <button data-cat="ani">🐯<span>동물</span></button>
+      <button data-cat="fruit">🍎<span>과일</span></button>
+      <button data-cat="ride">🚗<span>탈것</span></button>
+    </div>
+    <div class="sheet-sec">단계</div>
+    <div class="sheet-grid" id="cat-lv">
+      <button data-lv="1">✏️<span>따라 쓰기</span></button>
+      <button data-lv="2">👀<span>보고 쓰기</span></button>
+      <button data-lv="3">👂<span>듣고 쓰기</span></button>
+    </div>
+    <div class="lock-btns">
+      <button class="btn" id="cat-go">✅ 시작!</button>
+      <button class="btn ghost" id="cat-close">✕</button>
+    </div>
+  </div>
 </div>
 
 <div class="lock" id="lock">
@@ -1169,7 +1237,7 @@ if (typeof settings.pin !== 'string') settings.pin = '';
 
 // 사용량 기록 (부모가 비용을 눈으로 확인할 수 있게)
 // 휴대폰에서 어느 버전이 돌아가는지 눈으로 확인할 수 있게 함 (설정 화면에 표시)
-var APP_VERSION = '2026-09-24 (33판)';
+var APP_VERSION = '2026-09-24 (34판)';
 
 var LS_USAGE = 'owl_usage_v1';
 var usage = loadJSON(LS_USAGE, {});
@@ -1350,6 +1418,8 @@ if (settings.learnImage !== 'ai') settings.learnImage = 'free';
 if (settings.learnVoice !== 'ai') settings.learnVoice = 'device';
 // 백업 파일에 API 키를 같이 담을지. 담으면 새 폰에서 바로 되지만, 파일이 새면 남이 요금을 쓸 수 있음
 if (settings.backupKey !== 'off') settings.backupKey = 'on';
+// 3단계(듣고 쓰기)를 맞히면 AI 그림을 상으로 줄지. 끄면 무료 이모지 그림만 씀
+if (settings.rewardAi !== 'off') settings.rewardAi = 'on';
 
 /* ════════════════════════════════════════════
    유틸
@@ -1505,7 +1575,8 @@ function fillWordShelf(sh) {
   if (!sh) return;
   sh.innerHTML = '';
   var inShelf = sh.id === 'shelf-words';
-  var list = learnWords.filter(function (c) { return inShelf ? !!c.shelved : !c.shelved; });
+  /* 모으면 바로 책장에 들어가므로, 홈에는 "방금 모은 것"만 몇 개 보여준다 */
+  var list = inShelf ? learnWords.filter(function (c) { return !!c.shelved; }) : learnWords.slice(0, 8);
   // 이야기책 탭(새 책 찍기)과 같은 구조가 되게, 맨 위에 새 낱말 카드를 둔다
   if (sh.id === 'shelf-words') {
     sh.classList.toggle('editing', editing);
@@ -1538,8 +1609,7 @@ function fillWordShelf(sh) {
     el.className = 'book custom';
     el.innerHTML = '<span class="cover"></span><span class="name"></span><span class="tag"></span>' +
       '<span class="del" aria-label="삭제">✕</span>' +
-      '<span class="upg" aria-label="그림 업그레이드(부모)">🎨</span>' +
-      (inShelf ? '' : '<span class="tobook" aria-label="책장으로">📚</span>');
+      '<span class="upg" aria-label="그림 업그레이드(부모)">🎨</span>';
     var cv = el.querySelector('.cover');
     if (card.cover) { var im = document.createElement('img'); im.src = card.cover; im.alt = ''; cv.appendChild(im); }
     else {
@@ -1786,6 +1856,99 @@ function guideFontSize(cw, ch, text) {
   return Math.floor(Math.min(ch * 0.64, (cw * 0.88) / n));
 }
 
+/* ── 주제와 단계 ──
+   단계는 "보여주는 방식"이 다르다.
+   1단계 따라 쓰기 : 그림 + 글자 + 점선 (공짜 채점)
+   2단계 보고 쓰기 : 글자만 보고 빈 판에 쓰기 (AI가 글씨를 읽어 채점) → 맞히면 무료 그림 카드
+   3단계 듣고 쓰기 : 소리만 듣고 쓰기 (AI 채점) → 맞히면 AI 그림으로 업그레이드
+   낱말은 짧은 것부터 나와서 글자 수가 점점 늘어난다. */
+var THEME_META = {
+  ja:    { emoji: 'ㄱ', name: '자음' },
+  mo:    { emoji: 'ㅏ', name: '모음' },
+  ga:    { emoji: '가', name: '글자' },
+  ani:   { emoji: '🐯', name: '동물' },
+  fruit: { emoji: '🍎', name: '과일' },
+  ride:  { emoji: '🚗', name: '탈것' }
+};
+var LEVEL_NAME = { 1: '따라 쓰기', 2: '보고 쓰기', 3: '듣고 쓰기' };
+
+// 글자 수가 적은 것부터 — 쉬운 것에서 어려운 것으로
+var themeListCache = {};
+function themeList(theme) {
+  if (themeListCache[theme]) return themeListCache[theme];
+  var src = TRACE_SETS[theme] || [];
+  var out = src.slice().sort(function (a, b) { return a.length - b.length; });
+  themeListCache[theme] = out;
+  return out;
+}
+
+function progKey() { return pad.theme + '_' + (pad.level || 1); }
+function progGet() {
+  var m = settings.learnProg || {};
+  return m[progKey()] || 0;
+}
+function progSet(v) {
+  if (!settings.learnProg) settings.learnProg = {};
+  settings.learnProg[progKey()] = v;
+  saveJSON(LS_SETTINGS, settings);
+}
+
+/* 지금 공부할 것을 하나 꺼내 화면을 그 단계에 맞게 차린다 */
+function startLearnItem(advance) {
+  var list = themeList(pad.theme);
+  if (!list.length) return;
+  var i = progGet();
+  if (advance) { i = (i + 1) % list.length; progSet(i); }
+  else i = i % list.length;
+  pad.target = list[i];
+  pad.guide = (pad.level === 1) ? pad.target : null;
+  pad.strokes = []; pad.cur = null;
+
+  var meta = THEME_META[pad.theme] || { emoji: '✏️', name: '' };
+  $('pad-tag').textContent = meta.emoji + ' ' + meta.name + ' · ' +
+    (LEVEL_NAME[pad.level] || '') + ' · ' + (i + 1) + '/' + list.length +
+    ' · ' + pad.target.length + '글자';
+  $('pad-head').hidden = false;
+  $('ph-emoji').textContent = (pad.level === 1) ? wordEmoji(pad.target) : '';
+  $('ph-word').textContent = (pad.level === 3) ? '？' : pad.target;
+  $('btn-stroke').hidden = (pad.level !== 1);
+  $('btn-hear').hidden = false;
+
+  padResize(); padRedraw();
+  sayTarget();
+  if (pad.level === 1) setTimeout(playStrokeOrder, 420);   // 쓰는 순서를 먼저 보여줌
+  if (pad.level === 1) learnMsg('✏️ 점선을 따라 써 보자! ✏️ 를 누르면 순서를 다시 봐요');
+  else if (pad.level === 2) learnMsg('👀 글자를 보고 빈 곳에 써 보자!');
+  else learnMsg('👂 잘 듣고 써 보자! 🔊 를 누르면 다시 들려줘요');
+}
+
+function sayTarget() {
+  if (!pad.target) return;
+  var nm = TRACE_NAMES[pad.target] || pad.target;
+  speakKorean(pad.level === 3 ? (nm + '! ' + nm + '를 써 보세요') : nm);
+}
+
+// 낱말에 어울리는 이모지 (무료 그림) — 없으면 주제 이모지
+var WORD_EMOJI = {
+  '호랑이': '🐯', '강아지': '🐶', '고양이': '🐱',
+  '토끼': '🐰', '사자': '🦁', '코끼리': '🐘',
+  '원숭이': '🐵', '기린': '🦒', '곰': '🐻',
+  '여우': '🦊', '돼지': '🐷', '오리': '🦆',
+  '병아리': '🐥', '돌고래': '🐬',
+  '사과': '🍎', '바나나': '🍌', '포도': '🍇',
+  '딸기': '🍓', '수박': '🍉', '귤': '🍊',
+  '복숭아': '🍑', '배': '🍐', '참외': '🍈',
+  '감': '🧡', '키위': '🥝', '레몬': '🍋',
+  '버스': '🚌', '기차': '🚆', '자동차': '🚗',
+  '비행기': '✈️', '트럭': '🚚', '소방차': '🚒',
+  '경찰차': '🚓', '자전거': '🚲', '헬기콥터': '🚁'
+};
+function wordEmoji(w) {
+  if (WORD_EMOJI[w]) return WORD_EMOJI[w];
+  var m = THEME_META[pad.theme];
+  return (m && m.emoji) || '✏️';
+}
+
 function pickTraceChar() {
   var set = TRACE_SETS[pad.theme];
   if (!set) { pad.guide = null; return; }
@@ -1793,6 +1956,240 @@ function pickTraceChar() {
   while (set.length > 1 && next === pad.guide) next = set[Math.floor(Math.random() * set.length)];
   pad.guide = next || set[0];
   speakKorean(TRACE_NAMES[pad.guide] || pad.guide);   // 뭐를 쓰는지 소리로 알려줌
+}
+
+/* ── 획순 보여주기 ──
+   어디서 시작해 어느 쪽으로 긋는지를 주황색 펜이 직접 그려서 보여준다.
+   · 자음·모음 한 글자 : 아래 표의 획을 순서대로 (진짜 획순)
+   · 가·각 같은 글자   : 초성 → 초성+중성 → 받침 순으로 조립되며 나타남
+     (한글을 배우는 순서 그대로. 글꼴로 그리니 점선 안내와 딱 맞음) */
+function circlePoly(cx, cy, r) {
+  var p = [];
+  for (var a = 0; a <= 24; a++) {
+    var t = -Math.PI / 2 + a * (Math.PI * 2 / 24);
+    p.push([cx + r * Math.cos(t), cy + r * Math.sin(t)]);
+  }
+  return p;
+}
+
+var JAMO_STROKES = {
+  'ㄱ': [[[0.10, 0.12], [0.88, 0.12], [0.72, 0.90]]],
+  'ㄴ': [[[0.16, 0.10], [0.16, 0.86], [0.90, 0.86]]],
+  'ㄷ': [[[0.12, 0.12], [0.88, 0.12]], [[0.12, 0.12], [0.12, 0.86], [0.88, 0.86]]],
+  'ㄹ': [[[0.12, 0.10], [0.86, 0.10], [0.74, 0.42]], [[0.14, 0.44], [0.86, 0.44]],
+         [[0.14, 0.44], [0.14, 0.86], [0.86, 0.86]]],
+  'ㅁ': [[[0.14, 0.12], [0.14, 0.88]], [[0.14, 0.12], [0.86, 0.12], [0.86, 0.88]],
+         [[0.14, 0.88], [0.86, 0.88]]],
+  'ㅂ': [[[0.14, 0.10], [0.14, 0.88]], [[0.86, 0.10], [0.86, 0.88]],
+         [[0.14, 0.50], [0.86, 0.50]], [[0.14, 0.88], [0.86, 0.88]]],
+  'ㅅ': [[[0.50, 0.10], [0.14, 0.90]], [[0.50, 0.38], [0.88, 0.90]]],
+  'ㅈ': [[[0.12, 0.14], [0.88, 0.14]], [[0.50, 0.14], [0.14, 0.90]], [[0.50, 0.38], [0.88, 0.90]]],
+  'ㅊ': [[[0.50, 0.02], [0.50, 0.16]], [[0.12, 0.26], [0.88, 0.26]],
+         [[0.50, 0.26], [0.16, 0.92]], [[0.50, 0.46], [0.88, 0.92]]],
+  'ㅋ': [[[0.10, 0.12], [0.88, 0.12], [0.72, 0.90]], [[0.30, 0.50], [0.84, 0.50]]],
+  'ㅌ': [[[0.12, 0.12], [0.88, 0.12]], [[0.12, 0.12], [0.12, 0.88], [0.88, 0.88]],
+         [[0.16, 0.50], [0.86, 0.50]]],
+  'ㅍ': [[[0.10, 0.16], [0.90, 0.16]], [[0.28, 0.16], [0.24, 0.82]],
+         [[0.72, 0.16], [0.76, 0.82]], [[0.10, 0.84], [0.90, 0.84]]],
+  'ㅏ': [[[0.46, 0.06], [0.46, 0.94]], [[0.46, 0.50], [0.88, 0.50]]],
+  'ㅑ': [[[0.46, 0.06], [0.46, 0.94]], [[0.46, 0.36], [0.88, 0.36]], [[0.46, 0.64], [0.88, 0.64]]],
+  'ㅓ': [[[0.12, 0.50], [0.54, 0.50]], [[0.54, 0.06], [0.54, 0.94]]],
+  'ㅕ': [[[0.12, 0.36], [0.54, 0.36]], [[0.12, 0.64], [0.54, 0.64]], [[0.54, 0.06], [0.54, 0.94]]],
+  'ㅗ': [[[0.50, 0.14], [0.50, 0.62]], [[0.08, 0.64], [0.92, 0.64]]],
+  'ㅛ': [[[0.34, 0.16], [0.34, 0.62]], [[0.66, 0.16], [0.66, 0.62]], [[0.08, 0.64], [0.92, 0.64]]],
+  'ㅜ': [[[0.08, 0.36], [0.92, 0.36]], [[0.50, 0.36], [0.50, 0.86]]],
+  'ㅠ': [[[0.08, 0.36], [0.92, 0.36]], [[0.34, 0.38], [0.34, 0.84]], [[0.66, 0.38], [0.66, 0.84]]],
+  'ㅡ': [[[0.08, 0.50], [0.92, 0.50]]],
+  'ㅣ': [[[0.50, 0.06], [0.50, 0.94]]]
+};
+JAMO_STROKES['ㅇ'] = [circlePoly(0.50, 0.50, 0.36)];
+JAMO_STROKES['ㅎ'] = [[[0.50, 0.02], [0.50, 0.14]], [[0.16, 0.24], [0.84, 0.24]],
+                      circlePoly(0.50, 0.64, 0.27)];
+
+var CHO_LIST = 'ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ';
+function hangulParts(ch) {
+  var c = ch.charCodeAt(0) - 0xAC00;
+  if (c < 0 || c > 11171) return null;
+  return { cho: Math.floor(c / 588), jung: Math.floor((c % 588) / 28), jong: c % 28 };
+}
+function composeHangul(cho, jung, jong) {
+  return String.fromCharCode(0xAC00 + cho * 588 + jung * 28 + jong);
+}
+var JUNG_LIST = 'ㅏㅐㅑㅒㅓㅔㅕㅖㅗㅘㅙㅚㅛㅜㅝㅞㅟㅠㅡㅢㅣ';
+var JONG_LIST = ' ㄱㄲㄳㄴㄵㄶㄷㄹㄺㄻㄼㄽㄾㄿㅀㅁㅂㅄㅅㅆㅇㅈㅊㅋㅌㅍㅎ';
+// 오른쪽에 붙는 모음(ㅏㅓㅣ…) / 아래에 붙는 모음(ㅗㅜㅡ…)
+var JUNG_RIGHT = { 0:1, 1:1, 2:1, 3:1, 4:1, 5:1, 6:1, 7:1, 20:1 };
+var JUNG_DOWN = { 8:1, 12:1, 13:1, 17:1, 18:1 };
+
+/* 글자 한 칸을 자모 자리로 나눈다 — 초성은 왼쪽(또는 위), 중성은 오른쪽(또는 아래), 받침은 맨 아래.
+   글꼴이 그린 모양과 완벽히 같진 않지만, "어디서 시작해 어느 쪽으로 긋는지"를 보여주기엔 충분하다. */
+function syllableBoxes(p, bx) {
+  var bodyH = p.jong ? bx.h * 0.70 : bx.h;
+  var out = {};
+  if (JUNG_RIGHT[p.jung]) {
+    out.cho = { l: bx.l, t: bx.t, w: bx.w * 0.46, h: bodyH };
+    out.jung = { l: bx.l + bx.w * 0.50, t: bx.t, w: bx.w * 0.50, h: bodyH };
+  } else if (JUNG_DOWN[p.jung]) {
+    out.cho = { l: bx.l + bx.w * 0.20, t: bx.t, w: bx.w * 0.60, h: bodyH * 0.52 };
+    out.jung = { l: bx.l, t: bx.t + bodyH * 0.54, w: bx.w, h: bodyH * 0.46 };
+  } else {
+    return null;   // ㅘ·ㅚ 같은 겹모음은 자리 나누기가 까다로워 다른 방식으로
+  }
+  if (p.jong) out.jong = { l: bx.l, t: bx.t + bx.h * 0.72, w: bx.w, h: bx.h * 0.28 };
+  return out;
+}
+
+/* 글자 하나를 쓰는 순서대로 펼친다.
+   ① 자모를 다 아는 글자면 획 하나하나 (진짜 획순)
+   ② 겹모음 등 모르는 글자면 "초성+중성 → 받침" 조립 단계로 (글꼴로 그려서 점선과 딱 맞음) */
+function charStrokePlan(ch, bx) {
+  var p = hangulParts(ch);
+  if (!p) {
+    if (JAMO_STROKES[ch]) {
+      return JAMO_STROKES[ch].map(function (poly) { return { kind: 'poly', poly: poly, box: bx }; });
+    }
+    return [{ kind: 'glyph', glyph: ch, box: bx }];
+  }
+  var boxes = syllableBoxes(p, bx);
+  var cho = CHO_LIST.charAt(p.cho);
+  var jung = JUNG_LIST.charAt(p.jung);
+  var jong = p.jong ? JONG_LIST.charAt(p.jong) : '';
+  if (boxes && JAMO_STROKES[cho] && JAMO_STROKES[jung] && (!jong || JAMO_STROKES[jong])) {
+    var out = [];
+    JAMO_STROKES[cho].forEach(function (poly) { out.push({ kind: 'poly', poly: poly, box: boxes.cho }); });
+    JAMO_STROKES[jung].forEach(function (poly) { out.push({ kind: 'poly', poly: poly, box: boxes.jung }); });
+    if (jong) JAMO_STROKES[jong].forEach(function (poly) { out.push({ kind: 'poly', poly: poly, box: boxes.jong }); });
+    return out;
+  }
+  // 모르는 자모가 있으면 조립 단계로 (초성만 따로 크게 그리면 어긋나서 생략)
+  var plan = [{ kind: 'glyph', glyph: composeHangul(p.cho, p.jung, 0), box: bx }];
+  if (p.jong) plan.push({ kind: 'glyph', glyph: ch, box: bx });
+  return plan;
+}
+
+function polyLengths(poly) {
+  var segs = [], total = 0;
+  for (var i = 1; i < poly.length; i++) {
+    var dx = poly[i][0] - poly[i - 1][0], dy = poly[i][1] - poly[i - 1][1];
+    var d = Math.sqrt(dx * dx + dy * dy);
+    segs.push(d); total += d;
+  }
+  return { segs: segs, total: total || 1 };
+}
+
+var strokeTimer = null;
+function stopStrokeOrder() {
+  if (strokeTimer) { cancelAnimationFrame(strokeTimer); strokeTimer = null; }
+}
+
+function playStrokeOrder() {
+  var text = pad.guide || pad.target;
+  if (!text) return;
+  stopStrokeOrder();
+  var c = padCanvas();
+  if (!c || !c.width) return;
+  var x = c.getContext('2d');
+  var fs = guideFontSize(c.width, c.height, text);
+  x.font = 'bold ' + fs + 'px sans-serif';
+  var total = x.measureText(text).width;
+  var left = c.width / 2 - total / 2;
+  var cx = [], box = [], cy = c.height / 2 + c.height * 0.02;
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  for (var i = 0; i < text.length; i++) {
+    var ch0 = text.charAt(i);
+    var m = x.measureText(ch0);
+    var mid = left + m.width / 2;
+    cx.push(mid);
+    /* 글꼴이 실제로 잉크를 찍은 네모를 재서, 그 안에 획을 그린다.
+       (글자 상자 전체에 맞추면 점선보다 위쪽·크게 그려져 어긋났음) */
+    var bl = mid - m.width / 2, br = mid + m.width / 2, bt = cy - fs / 2, bb = cy + fs / 2;
+    if (typeof m.actualBoundingBoxAscent === 'number' && m.actualBoundingBoxAscent > 0) {
+      bl = mid - m.actualBoundingBoxLeft;
+      br = mid + m.actualBoundingBoxRight;
+      bt = cy - m.actualBoundingBoxAscent;
+      bb = cy + m.actualBoundingBoxDescent;
+    }
+    box.push({ l: bl, t: bt, w: Math.max(1, br - bl), h: Math.max(1, bb - bt) });
+    left += m.width;
+  }
+  // 재생 목록: 획 하나 또는 조립 한 단계씩
+  var plan = [];
+  for (var i2 = 0; i2 < text.length; i2++) {
+    var part = charStrokePlan(text.charAt(i2), box[i2]);
+    for (var k = 0; k < part.length; k++) {
+      part[k].cx = cx[i2];
+      part[k].n = k + 1;
+      part[k].ci = i2;
+      part[k].numBox = box[i2];
+      plan.push(part[k]);
+    }
+  }
+  if (!plan.length) return;
+
+  var idx = 0, t0 = 0;
+  var DUR = 620;
+  function frame(ts) {
+    if (!t0) t0 = ts;
+    var st = plan[idx];
+    var t = Math.min(1, (ts - t0) / DUR);
+    padRedraw();
+    // 이미 끝난 글자는 흐리게 남겨 둠
+    x.save();
+    x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.font = 'bold ' + fs + 'px sans-serif';
+    for (var q = 0; q < st.ci; q++) {
+      x.fillStyle = 'rgba(214, 122, 40, 0.35)';
+      x.fillText(text.charAt(q), cx[q], cy);
+    }
+    x.fillStyle = '#D9761E';
+    x.strokeStyle = '#D9761E';
+    if (st.kind === 'glyph') {
+      x.globalAlpha = 0.35 + 0.65 * t;
+      x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.fillText(st.glyph, st.cx, cy);
+      x.globalAlpha = 1;
+    } else {
+      var bx = st.box;
+      var L = polyLengths(st.poly);
+      var want = L.total * t, acc = 0;
+      x.lineWidth = Math.max(6, Math.min(bx.w, bx.h) / 11);
+      x.lineCap = 'round'; x.lineJoin = 'round';
+      x.beginPath();
+      var px = bx.l + st.poly[0][0] * bx.w;
+      var py = bx.t + st.poly[0][1] * bx.h;
+      x.moveTo(px, py);
+      for (var v = 1; v < st.poly.length; v++) {
+        var d = L.segs[v - 1];
+        var a = st.poly[v - 1], b = st.poly[v];
+        var f = Math.max(0, Math.min(1, (want - acc) / d));
+        px = bx.l + (a[0] + (b[0] - a[0]) * f) * bx.w;
+        py = bx.t + (a[1] + (b[1] - a[1]) * f) * bx.h;
+        x.lineTo(px, py);
+        acc += d;
+        if (acc >= want) break;
+      }
+      x.stroke();
+      // 펜 끝을 동그라미로
+      x.beginPath(); x.arc(px, py, x.lineWidth * 0.7, 0, 7); x.fill();
+    }
+    // 몇 번째 획인지 숫자
+    x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.font = 'bold ' + Math.round(Math.max(16, fs * 0.16)) + 'px sans-serif';
+    x.fillStyle = '#B3541E';
+    x.fillText(String(st.n), (st.numBox || st.box).l - 14, (st.numBox || st.box).t - 10);
+    x.restore();
+
+    if (t >= 1) {
+      idx++; t0 = 0;
+      if (idx >= plan.length) {
+        strokeTimer = null;
+        setTimeout(function () { if (!strokeTimer) padRedraw(); }, 450);
+        return;
+      }
+    }
+    strokeTimer = requestAnimationFrame(frame);
+  }
+  strokeTimer = requestAnimationFrame(frame);
 }
 
 function padCanvas() { return $('learn-pad'); }
@@ -1811,6 +2208,7 @@ function padResize() {
 function padRedraw() {
   var c = padCanvas();
   if (!c) return;
+  if (!pad.strokes) pad.strokes = [];   // 혹시라도 비어 있으면 그리다 멈추지 않게
   var x = c.getContext('2d');
   x.fillStyle = '#FFFFFF';
   x.fillRect(0, 0, c.width, c.height);
@@ -1857,6 +2255,7 @@ function padInit() {
   c.__init = true;
   c.addEventListener('pointerdown', function (ev) {
     ev.preventDefault();
+    stopStrokeOrder();          // 아이가 쓰기 시작하면 시범은 멈춤
     padResize();
     try { c.setPointerCapture(ev.pointerId); } catch (e) {}
     pad.cur = [padPoint(ev)];
@@ -1874,20 +2273,64 @@ function padInit() {
   c.addEventListener('pointercancel', up);
 }
 
+/* ✍️ 직접 쓰기로 돌아가기 */
+function backToFreeWrite() {
+  stopStrokeOrder();
+  pad.theme = null; pad.level = 1; pad.guide = null; pad.target = null;
+  pad.strokes = []; pad.cur = null;
+  $('pad-head').hidden = true;
+  $('pad-tag').textContent = '';
+  var bs = $('trace-row').querySelectorAll('button');
+  for (var i = 0; i < bs.length; i++) bs[i].classList.toggle('on', bs[i].dataset.tr === 'off');
+  padResize(); padRedraw();
+  learnMsg('');
+}
+
 $('trace-row').addEventListener('click', function (e) {
   var b = e.target.closest('button');
   if (!b) return;
-  var bs = $('trace-row').querySelectorAll('button');
-  for (var i = 0; i < bs.length; i++) bs[i].classList.toggle('on', bs[i] === b);
-  pad.theme = b.dataset.tr === 'off' ? null : b.dataset.tr;
-  pad.strokes = []; pad.cur = null;
-  pad.quizTarget = null;
-  if (pad.theme === 'quiz') { pad.guide = null; pickQuizWord(); }
-  else if (pad.theme) pickTraceChar();
-  else pad.guide = null;
-  padResize(); padRedraw();
-  if (pad.theme !== 'quiz') learnMsg(pad.theme ? '점선을 따라 손가락으로 써 보자!' : '');
+  if (b.id === 'btn-pick-cat') { openCatSheet(); return; }
+  backToFreeWrite();
 });
+
+/* ── 무엇을 공부할지 고르는 창 ── */
+var catPick = { cat: 'ja', lv: 1 };
+function paintCatSheet() {
+  ['cat-row1', 'cat-row2'].forEach(function (id) {
+    var bs = $(id).querySelectorAll('button');
+    for (var i = 0; i < bs.length; i++) bs[i].classList.toggle('on', bs[i].dataset.cat === catPick.cat);
+  });
+  var lv = $('cat-lv').querySelectorAll('button');
+  for (var j = 0; j < lv.length; j++) lv[j].classList.toggle('on', +lv[j].dataset.lv === catPick.lv);
+}
+function openCatSheet() {
+  if (pad.theme) { catPick.cat = pad.theme; catPick.lv = pad.level || 1; }
+  paintCatSheet();
+  $('cat-sheet').classList.add('open');
+}
+function closeCatSheet() { $('cat-sheet').classList.remove('open'); }
+
+$('cat-sheet').addEventListener('click', function (e) {
+  var b = e.target.closest('button');
+  if (!b) { if (e.target === $('cat-sheet')) closeCatSheet(); return; }
+  if (b.dataset.cat) { catPick.cat = b.dataset.cat; paintCatSheet(); return; }
+  if (b.dataset.lv) { catPick.lv = +b.dataset.lv; paintCatSheet(); return; }
+});
+
+$('cat-close').addEventListener('click', closeCatSheet);
+$('cat-go').addEventListener('click', function () {
+  closeCatSheet();
+  warmDeviceVoice();
+  pad.theme = catPick.cat;
+  pad.level = catPick.lv;
+  pad.quizTarget = null;
+  var bs = $('trace-row').querySelectorAll('button');
+  for (var i = 0; i < bs.length; i++) bs[i].classList.toggle('on', bs[i].id === 'btn-pick-cat');
+  startLearnItem(false);
+});
+
+$('btn-hear').addEventListener('click', function () { sayTarget(); });
+$('btn-stroke').addEventListener('click', function () { playStrokeOrder(); });
 
 $('pad-undo').addEventListener('click', function () { pad.strokes.pop(); pad.cur = null; padRedraw(); });
 $('pad-clear').addEventListener('click', function () { pad.strokes = []; pad.cur = null; padRedraw(); });
@@ -1962,8 +2405,88 @@ function traceScore() {
   return { coverage: gHit / gPix, precision: sOk / sPix };
 }
 
+/* 맞힌 낱말을 카드로 만들어 곧바로 책장에 넣어준다 (따로 모으기를 누를 필요 없음).
+   2단계 = 무료 이모지 그림, 3단계 = AI 그림으로 업그레이드. */
+function rewardCard(word, level) {
+  var card = null;
+  for (var i = 0; i < learnWords.length; i++) if (learnWords[i].word === word) { card = learnWords[i]; break; }
+  var isNew = !card;
+  if (!card) {
+    card = { id: uid(), word: word, emoji: wordEmoji(word), story: '', detail: '',
+             cover: null, createdAt: Date.now() };
+    learnWords.unshift(card);
+  }
+  card.shelved = true;                 // 모으면 바로 책장
+  card.level = Math.max(card.level || 0, level);
+  if (level >= 3) card.quizWin = true;
+  saveWords();
+  renderWordShelf();
+  flyBurstToShelf();
+  if (level >= 3 && !card.cover && settings.rewardAi !== 'off' && apiKey() && !enforceBudget()) {
+    toast('🎨 3단계 성공! 특별한 그림을 만들고 있어요…', 3500);
+    forceWordImage(card);
+  } else {
+    toast((isNew ? '🌟 「' + word + '」 카드를 모았어요!' : '⭐ 「' + word + '」 카드가 더 세졌어요!') +
+          ' 책장에 있어요', 3500);
+  }
+  // 이야기가 없는 카드면 조용히 채워 넣음 (들려줄 거리)
+  if (!card.story && apiKey() && !enforceBudget()) {
+    callGemini([{ text: learnPrompt(word) }], null).then(function (r2) {
+      if (!r2 || r2.ok !== true || !r2.story) return;
+      card.story = String(r2.story).slice(0, 700);
+      if (r2.emoji) card.emoji = String(r2.emoji).slice(0, 4);
+      saveWords(); renderWordShelf();
+    }).catch(function () {});
+  }
+  return card;
+}
+
+function flyBurstToShelf() {
+  rewardBurst();
+  try {
+    $('tab-shelf').classList.add('pop');
+    setTimeout(function () { $('tab-shelf').classList.remove('pop'); }, 500);
+  } catch (e) {}
+}
+
+/* 2·3단계 채점: 아이가 쓴 글씨를 AI가 읽어서 정답과 맞춰본다 */
+function gradeWritten() {
+  var target = pad.target;
+  if (!pad.strokes.length) { learnMsg('✍️ 먼저 손가락으로 써 보자!'); return; }
+  if (!apiKey()) { learnMsg('이 단계는 설정에 API 키가 있어야 해요 (1단계는 키 없이도 돼요)'); return; }
+  armAiAudio(); warmDeviceVoice();
+  var b64 = padImageB64();
+  var ep = newEpoch();
+  showLoading('🔎', '돌고래가 글씨를 읽어보고 있어요…', '');
+  loadingCancelFn = function () { newEpoch(); };
+  callGemini([
+    { inlineData: { mimeType: 'image/png', data: b64 } },
+    { text: '사진은 6세 아이가 손가락으로 쓴 한글이야. 무엇이라고 썼는지만 읽어줘. JSON만: {"word": ""}' }
+  ], null).then(function (r) {
+    if (!epochValid(ep)) return;
+    hideLoading();
+    var got = (r && r.word) ? String(r.word).replace(/\s+/g, '') : '';
+    if (got !== target) {
+      learnMsg('🙈 「' + (got || '?') + '」로 읽혔어요. 다시 해볼까요?<br>🧽 다 지우고 또박또박 써 보자!');
+      speakKorean('다시 한번 써 볼까요?');
+      return;
+    }
+    speakKorean('딩동댕! 정답! ' + target + '!');
+    learnMsg('🎉 정답! 「' + target + '」 참 잘 썼어요!');
+    rewardCard(target, pad.level);
+    pad.strokes = []; padRedraw();
+    setTimeout(function () { startLearnItem(true); }, 2200);
+  }).catch(function (err) {
+    if (!epochValid(ep)) return;
+    hideLoading();
+    learnMsg(friendlyError(err));
+  });
+}
+
 function submitDrawing() {
-  /* 🎯 문제 모드: 쓴 글자를 비전으로 읽어 정답 확인. 맞추면 보상! */
+  // 2·3단계: AI가 글씨를 읽어 채점 → 맞히면 카드가 바로 책장에
+  if (pad.theme && pad.level >= 2 && pad.target) { gradeWritten(); return; }
+  /* 🎯 옛 문제 모드 (지금은 3단계가 대신함) */
   if (pad.theme === 'quiz' && pad.quizTarget) {
     if (!pad.strokes.length) { learnMsg('🎯 들려준 낱말을 먼저 써 보자!'); return; }
     if (!apiKey()) { learnMsg('문제 모드는 설정에 API 키가 있어야 해요'); return; }
@@ -2035,9 +2558,10 @@ function submitDrawing() {
     var done = pad.guide;
     var name = TRACE_NAMES[done] || done;
     speakKorean('참 잘했어요! ' + name + '!');
-    learnMsg('✨ 「' + done + '」 참 잘 썼어요! 다음 글자도 써 볼까요?');
+    learnMsg('✨ 「' + done + '」 참 잘 썼어요! 다음 것도 해볼까요?');
     pad.strokes = []; pad.cur = null;
-    pickTraceChar();
+    if (pad.theme && pad.level === 1) { setTimeout(function () { startLearnItem(true); }, 1100); }
+    else pickTraceChar();
     padRedraw();
     return;
   }
@@ -2150,11 +2674,13 @@ $('btn-learn-save').addEventListener('click', function () {
   var bk = reader.book;
   var card = bk && bk.learnCard;
   if (!card || learnWords.indexOf(card) >= 0) return;
+  card.shelved = true;               // 모으면 곧바로 책장으로 (따로 꽂을 필요 없음)
   learnWords.unshift(card);
   saveWords();
   renderWordShelf();
   $('btn-learn-save').hidden = true;
-  toast('⭐ 「' + card.word + '」를 공부 책장에 모았어요!', 3500);
+  flyBurstToShelf();
+  toast('⭐ 「' + card.word + '」를 책장에 모았어요!', 3500);
 });
 
 $('btn-learn-more').addEventListener('click', function () {
@@ -5344,6 +5870,10 @@ function renderSettings() {
   for (var p4 = 0; p4 < lvo.length; p4++) {
     lvo[p4].classList.toggle('on', lvo[p4].dataset.lvoice === (settings.learnVoice || 'device'));
   }
+  var rai = $('seg-rewardai').querySelectorAll('button');
+  for (var p6 = 0; p6 < rai.length; p6++) {
+    rai[p6].classList.toggle('on', rai[p6].dataset.rai === (settings.rewardAi || 'on'));
+  }
   var bky = $('seg-backupkey').querySelectorAll('button');
   for (var p5 = 0; p5 < bky.length; p5++) {
     bky[p5].classList.toggle('on', bky[p5].dataset.bkey === (settings.backupKey || 'on'));
@@ -5707,6 +6237,14 @@ $('seg-learnimage').addEventListener('click', function (e) {
   var b = e.target.closest('button');
   if (!b) return;
   settings.learnImage = b.dataset.limg === 'ai' ? 'ai' : 'free';
+  saveJSON(LS_SETTINGS, settings);
+  renderSettings();
+});
+
+$('seg-rewardai').addEventListener('click', function (e) {
+  var b = e.target.closest('button');
+  if (!b) return;
+  settings.rewardAi = b.dataset.rai === 'off' ? 'off' : 'on';
   saveJSON(LS_SETTINGS, settings);
   renderSettings();
 });
