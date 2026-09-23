@@ -362,6 +362,14 @@
   .slot.miss { background: #EDE9E2; box-shadow: none; border: 2px dashed rgba(65,53,92,0.22); }
   .slot.miss .pic { opacity: 0.3; filter: grayscale(1); }
   .slot.miss .lbl { color: var(--ink-soft); background: transparent; }
+  /* 따라 써 봤거나(1) 보고 써 봤으면(2) 조금씩 진해진다 — 아직 모은 건 아님 */
+  .slot.miss.lv1 { background: #E6E9EE; border-style: solid; border-color: rgba(65,53,92,0.18); }
+  .slot.miss.lv1 .pic { opacity: 0.5; filter: grayscale(0.5); }
+  .slot.miss.lv2 { background: #DCE8F4; border-style: solid; border-color: #9CC0DE; }
+  .slot.miss.lv2 .pic { opacity: 0.75; filter: none; }
+  .slot .step {
+    position: absolute; top: 3px; left: 4px; font-size: 12px; line-height: 1; opacity: 0.85;
+  }
   .slot .kill {
     position: absolute; top: 3px; right: 3px; width: 22px; height: 22px; border-radius: 50%;
     background: #D9534F; color: #fff; font-size: 13px; line-height: 22px; display: none;
@@ -1065,6 +1073,11 @@
     <h2>🗑️ 정리</h2>
     <button class="btn ghost" id="btn-clear-books">찍은 책 모두 지우기</button>
     <p class="hint">기본 동화 4권은 지워지지 않아요. 지우기 전에 위에서 백업해 두시면 안전해요.</p>
+    <button class="btn ghost" id="btn-clear-learn" style="margin-top:10px;">📔 공부 기록 모두 지우기</button>
+    <p class="hint">
+      앨범(도감)과 모은 낱말 카드를 전부 처음 상태로 되돌려요. <b>찍은 책은 그대로예요.</b><br>
+      아이가 실수로 누르지 않게 <b>부모님 확인</b>을 거쳐요.
+    </p>
   </div>
 </section>
 
@@ -1441,7 +1454,7 @@ if (typeof settings.pin !== 'string') settings.pin = '';
 
 // 사용량 기록 (부모가 비용을 눈으로 확인할 수 있게)
 // 휴대폰에서 어느 버전이 돌아가는지 눈으로 확인할 수 있게 함 (설정 화면에 표시)
-var APP_VERSION = '2026-09-24 (42판)';
+var APP_VERSION = '2026-09-24 (43판)';
 
 var LS_USAGE = 'owl_usage_v1';
 var usage = loadJSON(LS_USAGE, {});
@@ -1863,7 +1876,13 @@ function renderAlbum(sh) {
 
   var sum = document.createElement('div');
   sum.className = 'alb-sum';
-  sum.textContent = '🏆 모두 ' + totalGot + ' / ' + totalAll + ' 개를 모았어요';
+  var tried = 0;
+  ALBUMS.forEach(function (a) {
+    if (a.key === 'mine') return;
+    albumItems(a.key).forEach(function (w) { if (doneLevel(w) > 0 && doneLevel(w) < 3) tried++; });
+  });
+  sum.innerHTML = '🏆 모은 것 <b>' + totalGot + ' / ' + totalAll + '</b>' +
+                  (tried ? ' <span style="color:#4E7FA8;">· 연습 중 ' + tried + '</span>' : '');
   sh.appendChild(sum);
 
   var items = albumItems(albumPick);
@@ -1879,11 +1898,13 @@ function renderAlbum(sh) {
   grid.className = 'alb-grid';
   items.forEach(function (w) {
     var card = cardFor(w);
-    var got = isDone(w);
+    var lv = doneLevel(w);
+    var got = lv >= 3;
     var el = document.createElement('button');
-    el.className = 'slot ' + (got ? 'got' : 'miss') + ((card && card.cover) ? ' ai' : '');
+    el.className = 'slot ' + (got ? 'got' : 'miss lv' + lv) + ((card && card.cover) ? ' ai' : '');
     el.innerHTML = '<span class="pic"></span><span class="lbl"></span>' +
-                   (card ? '<span class="kill" aria-label="지우기">✕</span>' : '');
+                   (lv > 0 && lv < 3 ? '<span class="step">' + (lv === 1 ? '✏️' : '👀') + '</span>' : '') +
+                   (lv > 0 ? '<span class="kill" aria-label="지우기">✕</span>' : '');
     var pic = el.querySelector('.pic');
     if (card && card.cover) {
       var im = document.createElement('img');
@@ -1904,36 +1925,54 @@ function renderAlbum(sh) {
     var kb = el.querySelector('.kill');
     if (kb) kb.addEventListener('click', function (ev) {
       ev.stopPropagation();
-      if (!confirm('「' + w + '」 카드를 지울까요?')) return;
-      learnWords = learnWords.filter(function (c) { return c.word !== w; });
-      if (card.coverId) dbDelImg(card.coverId);
-      saveWords();
+      if (!confirm('「' + w + '」 기록을 지울까요?')) return;
+      forgetItem(w);
       renderWordShelf();
     });
 
     el.addEventListener('click', function () {
       if (card) { armAiAudio(); warmDeviceVoice(); openWordCard(card); return; }
-      if (got) { toast('✨ 「' + w + '」 잘 썼어요! 한 번 더 해볼까요?', 2500); }
-      studyItem(albumPick, w);
+      if (lv === 1) toast('✏️ 따라 써 봤어요! 👀 보고 쓰기에 도전!', 2800);
+      else if (lv === 2) toast('👀 보고 쓰기 성공! 👂 듣고 쓰면 모아져요', 2800);
+      studyItem(albumPick, w, lv);
     });
     grid.appendChild(el);
   });
   sh.appendChild(grid);
 }
 
+/* 한 낱말을 지울 땐 카드와 단계 기록을 함께 지워야 한다.
+   예전엔 카드만 지워서, 기록이 남은 칸이 계속 "모음"으로 보이고
+   지우기 버튼도 사라져 다시 지울 수 없었다. */
+function forgetItem(w) {
+  var c = cardFor(w);
+  if (c) {
+    if (c.coverId) dbDelImg(c.coverId);
+    learnWords = learnWords.filter(function (x) { return x.word !== w; });
+    saveWords();
+    deleteAudioFor(c.story + (c.detail ? '\n\n' + c.detail : ''));
+  }
+  if (settings.learnDone && settings.learnDone[w] !== undefined) {
+    delete settings.learnDone[w];
+    saveJSON(LS_SETTINGS, settings);
+  }
+}
+
 /* 회색 칸을 누르면 그 글자를 바로 따라 쓰러 감 */
-function studyItem(key, item) {
+function studyItem(key, item, lv) {
   if (key === 'mine') { showScreen('home'); return; }
   settings.appMode = 'learn';
   if (!settings.learnProg) settings.learnProg = {};
   var list = themeList(key);
   var idx = list.indexOf(item);
-  if (idx >= 0) settings.learnProg[key + '_1'] = idx;
+  // 이미 해낸 단계가 있으면 그다음 단계부터 (따라쓰기 → 보고쓰기 → 듣고쓰기)
+  var next = Math.max(1, Math.min(3, (lv || 0) + 1));
+  if (idx >= 0) settings.learnProg[key + '_' + next] = idx;
   saveJSON(LS_SETTINGS, settings);
   showScreen('home');
   applyAppMode();
   pad.theme = key;
-  pad.level = 1;
+  pad.level = next;
   var bs = $('trace-row').querySelectorAll('button');
   for (var i = 0; i < bs.length; i++) bs[i].classList.toggle('on', bs[i].id === 'btn-pick-cat');
   setTimeout(function () { startLearnItem(false); }, 60);
@@ -2007,10 +2046,8 @@ function fillWordShelf(sh) {
     if (delBtn) delBtn.addEventListener('click', function (ev) {
       ev.stopPropagation();
       if (!confirm('「' + card.word + '」 카드를 지울까요? (그 낱말 음성도 같이 지워져요)')) return;
-      learnWords = learnWords.filter(function (c) { return c.id !== card.id; });
-      if (card.coverId) dbDelImg(card.coverId);
-      saveWords(); renderWordShelf();
-      deleteAudioFor(card.story + (card.detail ? '\n\n' + card.detail : ''));
+      forgetItem(card.word);
+      renderWordShelf();
     });
     var ug = el.querySelector('.upg');
     if (ug) ug.addEventListener('click', function (ev) {
@@ -2406,18 +2443,24 @@ function themeList(theme) {
 
 /* 앨범(도감)을 채우려면 "무엇을 써 봤는지"를 남겨야 한다.
    따라 쓰기만 해도 한 칸이 채워지고, 낱말은 카드까지 생긴다. */
-function markDone(item) {
+/* 어느 단계까지 해냈는지 남긴다 (1 따라쓰기 / 2 보고쓰기 / 3 듣고쓰기).
+   "모았다"고 치는 건 3단계뿐 — 그래야 앨범을 채우는 보람이 있다. */
+function markDone(item, level) {
   if (!item) return;
   if (!settings.learnDone) settings.learnDone = {};
-  if (settings.learnDone[item]) return;
-  settings.learnDone[item] = Date.now();
+  var now = Math.max(1, Math.min(3, level || 1));
+  if (doneLevel(item) >= now) return;
+  settings.learnDone[item] = now;
   saveJSON(LS_SETTINGS, settings);
 }
-function isDone(item) {
-  if (settings.learnDone && settings.learnDone[item]) return true;
-  for (var i = 0; i < learnWords.length; i++) if (learnWords[i].word === item) return true;
-  return false;
+
+function doneLevel(item) {
+  var v = (settings.learnDone && settings.learnDone[item]) || 0;
+  if (v > 3) v = 1;                 // 예전에 시각으로 저장하던 기록은 1단계로 봄
+  if (cardFor(item)) v = 3;         // 카드가 있으면 이미 모은 것
+  return v;
 }
+function isDone(item) { return doneLevel(item) >= 3; }
 function cardFor(item) {
   for (var i = 0; i < learnWords.length; i++) if (learnWords[i].word === item) return learnWords[i];
   return null;
@@ -3299,8 +3342,13 @@ function gradeWritten() {
     }
     speakKorean('딩동댕! 정답! ' + target + '!');
     learnMsg('🎉 정답! 「' + target + '」 참 잘 썼어요!');
-    markDone(target);
-    rewardCard(target, pad.level);
+    markDone(target, pad.level);
+    if (pad.level >= 3) {
+      rewardCard(target, pad.level);          // 듣고 쓰기를 해내야 책장에 모임
+    } else {
+      renderWordShelf();
+      toast('👏 잘했어요! 이제 👂 듣고 쓰기까지 해내면 책장에 모아져요', 4000);
+    }
     pad.strokes = []; padRedraw();
     setTimeout(function () { startLearnItem(true); }, 2200);
   }).catch(function (err) {
@@ -3384,8 +3432,8 @@ function submitDrawing() {
     }
     var done = pad.guide;
     var name = TRACE_NAMES[done] || done;
-    markDone(done);                       // 앨범에 한 칸 채움
-    if (pad.target && pad.charIdx + 1 >= pad.target.length) markDone(pad.target);
+    markDone(done, 1);                    // 앨범에 "따라 써 봄" 표시
+    if (pad.target && pad.charIdx + 1 >= pad.target.length) markDone(pad.target, 1);
     speakKorean('참 잘했어요! ' + name + '!');
     pad.strokes = []; pad.cur = null;
     if (pad.theme && pad.level === 1) {
@@ -7616,6 +7664,23 @@ function deviceVoiceTest(sample) {
     synth.speak(u);
   }, 120);
 }
+
+$('btn-clear-learn').addEventListener('click', function () {
+  requireParent(function () {
+    var n = learnWords.length;
+    var keys = settings.learnDone ? Object.keys(settings.learnDone).length : 0;
+    if (!n && !keys) { toast('지울 공부 기록이 없어요'); return; }
+    if (!confirm('공부한 낱말 ' + n + '개와 앨범 기록 ' + keys + '칸을 모두 지울까요?\n찍은 책은 그대로예요.')) return;
+    learnWords.forEach(function (c) { if (c.coverId) dbDelImg(c.coverId); });
+    learnWords = [];
+    saveWords();
+    settings.learnDone = {};
+    settings.learnProg = {};
+    saveJSON(LS_SETTINGS, settings);
+    renderWordShelf();
+    toast('📔 공부 기록을 처음 상태로 되돌렸어요', 3500);
+  });
+});
 
 $('btn-clear-books').addEventListener('click', function () {
   if (!customBooks.length) { toast('지울 책이 없어요'); return; }
