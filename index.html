@@ -797,6 +797,9 @@
       <button class="btn ghost" id="btn-import-books">📥 책 가져오기</button>
     </div>
     <input type="file" id="import-file-input" accept="application/json,.json" hidden>
+    <div style="margin-top:14px;">
+      <button class="btn ghost" id="btn-check-update">🔄 업데이트 확인</button>
+    </div>
     <div style="margin-top:14px; font-size:14px;"><b>🔎 현재 상태</b></div>
     <div id="origin-box" style="margin-top:4px; font-size:13px; line-height:1.9; color:var(--ink-soft); word-break:break-all;"></div>
     <p class="hint">
@@ -1140,7 +1143,7 @@ if (typeof settings.pin !== 'string') settings.pin = '';
 
 // 사용량 기록 (부모가 비용을 눈으로 확인할 수 있게)
 // 휴대폰에서 어느 버전이 돌아가는지 눈으로 확인할 수 있게 함 (설정 화면에 표시)
-var APP_VERSION = '2026-09-24 (30판)';
+var APP_VERSION = '2026-09-24 (31판)';
 
 var LS_USAGE = 'owl_usage_v1';
 var usage = loadJSON(LS_USAGE, {});
@@ -5997,6 +6000,48 @@ function doExportBooks() {
     toast('내보내기에 실패했어요');
   }
 }
+
+/* 깃허브는 파일에 "10분간 다시 받지 말라"(max-age=600)는 꼬리표를 붙여 보낸다.
+   그래서 새 판을 올린 직후 앱을 껐다 켜도 한동안 옛 판이 그대로 뜬다.
+   이 버튼은 주소 뒤에 매번 다른 표시를 붙여 강제로 새로 받아온다.
+   주소의 도메인은 그대로라서 모아둔 책·낱말·그림·음성은 하나도 안 없어진다. */
+function versionOf(html) {
+  var m = String(html).match(/APP_VERSION\s*=\s*'([^']+)'/);
+  return m ? m[1] : null;
+}
+
+$('btn-check-update').addEventListener('click', function () {
+  var btn = this;
+  if (btn.disabled) return;
+  btn.disabled = true;
+  var old = btn.textContent;
+  btn.textContent = '🔄 확인 중…';
+  function done(msg, ms) {
+    btn.disabled = false;
+    btn.textContent = old;
+    if (msg) toast(msg, ms || 3500);
+  }
+  var base = location.pathname.replace(/[?#].*$/, '');
+  fetch(base + '?cb=' + Date.now(), { cache: 'no-store' })
+    .then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.text();
+    })
+    .then(function (html) {
+      var latest = versionOf(html);
+      if (!latest) { done('새 판을 확인하지 못했어요. 잠시 뒤 다시 해 주세요.'); return; }
+      if (latest === APP_VERSION) { done('✨ 이미 최신이에요 — ' + latest); return; }
+      btn.textContent = '🔄 새 판 받는 중…';
+      toast('새 판 ' + latest + ' 을(를) 받아올게요!', 2500);
+      // 책·음성은 그대로 두고 화면만 새로 받아 다시 시작
+      setTimeout(function () {
+        location.replace(base + '?v=' + Date.now());
+      }, 900);
+    })
+    .catch(function () {
+      done('인터넷에 연결되어 있는지 확인해 주세요.');
+    });
+});
 
 $('btn-import-books').addEventListener('click', function () {
   $('import-file-input').value = '';
