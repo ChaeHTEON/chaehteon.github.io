@@ -470,6 +470,25 @@
     box-shadow: 0 14px 40px rgba(0,0,0,0.6);
     transform-origin: center center; will-change: transform;
   }
+  /* 톡 누른 자리에서 떠오르는 하트 */
+  .heart-bit {
+    position: fixed; z-index: 341; pointer-events: none;
+    transition: transform 1.5s cubic-bezier(.25,.8,.4,1), opacity 1.5s;
+  }
+  /* 연속으로 누를 때 뜨는 콤보 글자 */
+  .combo-txt {
+    position: fixed; z-index: 342; pointer-events: none;
+    font-family: var(--font-ui); color: #FFD979;
+    text-shadow: 0 3px 10px rgba(0,0,0,0.6);
+    transition: transform 0.75s cubic-bezier(.2,1.4,.4,1), opacity 0.75s;
+  }
+  .imgview-zoom {
+    position: absolute; top: calc(env(safe-area-inset-top, 0px) + 14px); left: 16px;
+    width: 44px; height: 44px; border-radius: 50%; border: none;
+    background: rgba(255,255,255,0.9); font-size: 22px; line-height: 1;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.35);
+  }
+  .imgview-zoom.on { background: var(--sun); }
   .iv-tip {
     position: absolute; left: 0; right: 0;
     bottom: calc(env(safe-area-inset-bottom, 0px) + 18px);
@@ -1081,6 +1100,7 @@
 <div class="imgview" id="imgview" hidden>
   <img id="imgview-img" alt="">
   <button class="imgview-x" id="imgview-x" aria-label="닫기">✕</button>
+  <button class="imgview-zoom" id="imgview-zoom" aria-label="크게 보기">🔍</button>
   <div class="iv-tip" id="iv-tip">👉 그림을 톡톡 눌러봐! ✨</div>
 </div>
 
@@ -1354,7 +1374,7 @@ if (typeof settings.pin !== 'string') settings.pin = '';
 
 // 사용량 기록 (부모가 비용을 눈으로 확인할 수 있게)
 // 휴대폰에서 어느 버전이 돌아가는지 눈으로 확인할 수 있게 함 (설정 화면에 표시)
-var APP_VERSION = '2026-09-24 (39판)';
+var APP_VERSION = '2026-09-24 (40판)';
 
 var LS_USAGE = 'owl_usage_v1';
 var usage = loadJSON(LS_USAGE, {});
@@ -5192,28 +5212,66 @@ function setReaderCover(cover) {
    닫기는 아무 데나 탭. 읽어주는 건 그대로 계속됨. */
 function openImageView(src) {
   if (!src) return;
-  ivTaps = 0;
-  if ($('iv-tip')) $('iv-tip').textContent = '👉 그림을 톡톡 눌러봐! ✨  (어두운 곳을 누르면 닫혀요)';
+  ivTaps = 0; ivCombo = 0; ivComboAt = 0;
+  clearTimeout(ivComboTimer);
+  if ($('iv-tip')) $('iv-tip').textContent = '👉 빠르게 톡톡 누르면 콤보! 💖   🔍 크게 보기   (어두운 곳을 누르면 닫혀요)';
   ivReset();
   $('imgview-img').src = src;
   $('imgview').hidden = false;
 }
 function closeImageView() {
+  ivCombo = 0;
+  clearTimeout(ivComboTimer);
+  ['.heart-bit', '.combo-txt'].forEach(function (sel) {
+    var list = document.querySelectorAll(sel);
+    for (var i = 0; i < list.length; i++) {
+      try { list[i].parentNode.removeChild(list[i]); } catch (e) {}
+    }
+  });
   ivReset();
   $('imgview').hidden = true;
   try { $('imgview-img').removeAttribute('src'); } catch (e) {}
 }
 $('imgview-x').addEventListener('click', closeImageView);
+
+function ivSetZoom(on) {
+  ivBounceId++;                       // 튀는 중이면 멈춰서 배율이 꼬이지 않게
+  if (on) { iv.scale = 2.4; }
+  else { iv.scale = 1; iv.tx = 0; iv.ty = 0; }
+  ivApply();
+  var b = $('imgview-zoom');
+  if (b) {
+    b.classList.toggle('on', on);
+    b.textContent = on ? '🔎' : '🔍';
+  }
+}
+
+$('imgview-zoom').addEventListener('click', function (ev) {
+  ev.stopPropagation();
+  sfxWake(); sfxPop();
+  ivSetZoom(iv.scale <= 1.01);
+});
 $('reveal').addEventListener('click', closeReveal);
 
 /* 큰 그림 보기: 두 손가락으로 확대·축소, 확대 중엔 한 손가락으로 이동.
    두 번 탭 = 확대↔원래대로, 원래 크기에서 한 번 탭 = 닫기.
    (사진이 좀 흐려져도 자세히 들여다볼 수 있는 게 더 중요) */
 var iv = { scale: 1, tx: 0, ty: 0, pts: {}, pinch: null, drag: null, lastTap: 0 };
+function ivSyncZoomBtn() {
+  var b = $('imgview-zoom');
+  if (!b) return;
+  var on = iv.scale > 1.01;
+  b.classList.toggle('on', on);
+  b.textContent = on ? '🔎' : '🔍';
+}
+
 function ivApply() {
   $('imgview-img').style.transform = 'translate(' + iv.tx + 'px,' + iv.ty + 'px) scale(' + iv.scale + ')';
 }
-function ivReset() { iv.scale = 1; iv.tx = 0; iv.ty = 0; iv.pts = {}; iv.pinch = null; iv.drag = null; ivApply(); }
+function ivReset() {
+  iv.scale = 1; iv.tx = 0; iv.ty = 0; iv.pts = {}; iv.pinch = null; iv.drag = null;
+  ivApply(); ivSyncZoomBtn();
+}
 
 /* ── 큰 그림에서 놀기 (요금 0원) ──
    아이가 그림을 누를 때마다 반짝이가 터지고 그림이 통통 튄다.
@@ -5245,10 +5303,54 @@ function ivSparkle(x, y, big) {
   }
 }
 
-// 지금 배율을 기준으로 잠깐 통통 튀게 (확대 상태에서도 자연스럽게)
+// 누른 자리에서 하트가 두둥실 떠오름
+function ivHearts(x, y, n) {
+  var kinds = ['💛', '💖', '💚', '💙', '💜', '❤️'];
+  for (var i = 0; i < n; i++) {
+    (function (k) {
+      var h = document.createElement('span');
+      h.className = 'heart-bit';
+      h.textContent = kinds[Math.floor(Math.random() * kinds.length)];
+      h.style.left = x + 'px';
+      h.style.top = y + 'px';
+      h.style.fontSize = (18 + Math.random() * 16) + 'px';
+      h.style.transitionDelay = (k * 0.07) + 's';
+      document.body.appendChild(h);
+      requestAnimationFrame(function () {
+        var dx = (Math.random() - 0.5) * 110;
+        var dy = -(150 + Math.random() * 190);
+        h.style.transform = 'translate(' + dx + 'px,' + dy + 'px) rotate(' +
+                            Math.round(Math.random() * 60 - 30) + 'deg) scale(1.25)';
+        h.style.opacity = '0';
+      });
+      setTimeout(function () { try { h.parentNode.removeChild(h); } catch (e) {} }, 1800 + k * 80);
+    })(i);
+  }
+}
+
+// 「3 콤보!」 같은 글자가 솟았다 사라짐
+function ivComboText(x, y, n) {
+  var el = document.createElement('span');
+  el.className = 'combo-txt';
+  el.textContent = n + ' 콤보!';
+  el.style.left = (x - 40) + 'px';
+  el.style.top = (y - 50) + 'px';
+  el.style.fontSize = Math.min(38, 17 + n * 2) + 'px';
+  document.body.appendChild(el);
+  requestAnimationFrame(function () {
+    el.style.transform = 'translateY(-52px) scale(1.25)';
+    el.style.opacity = '0';
+  });
+  setTimeout(function () { try { el.parentNode.removeChild(el); } catch (e) {} }, 850);
+}
+
+/* 지금 배율을 기준으로 잠깐 통통 튀게.
+   확대 배율이 도중에 바뀌면(두 번 탭) 옛 배율로 되돌리지 않도록 번호표로 취소한다. */
+var ivBounceId = 0;
 function ivBounce(strength) {
-  var base = iv.scale, t0 = Date.now(), dur = 340;
+  var base = iv.scale, t0 = Date.now(), dur = 340, my = ++ivBounceId;
   (function step() {
+    if (my !== ivBounceId) return;
     var p = (Date.now() - t0) / dur;
     if (p >= 1) { iv.scale = base; ivApply(); return; }
     iv.scale = base * (1 + (strength || 0.12) * Math.sin(p * Math.PI));
@@ -5257,24 +5359,41 @@ function ivBounce(strength) {
   })();
 }
 
+/* 쉬지 않고 톡톡 누르면 콤보가 쌓인다.
+   콤보가 오를수록 하트가 많아지고 소리가 높아지고, 5의 배수마다 잔치. */
+var ivCombo = 0, ivComboAt = 0, ivComboTimer = null;
+var IV_COMBO_GAP = 1400;   // 이 시간 안에 또 누르면 이어짐
+
 function ivPlay(x, y) {
   ivTaps++;
   sfxWake();
-  var big = (ivTaps % 4 === 0);
-  ivSparkle(x, y, big);
-  ivBounce(big ? 0.22 : 0.11);
-  if (big) {
+  var now = Date.now();
+  ivCombo = (now - ivComboAt < IV_COMBO_GAP) ? ivCombo + 1 : 1;
+  ivComboAt = now;
+  clearTimeout(ivComboTimer);
+  ivComboTimer = setTimeout(function () { ivCombo = 0; }, IV_COMBO_GAP + 100);
+
+  var party = (ivCombo % 5 === 0);
+  ivSparkle(x, y, party);
+  ivHearts(x, y, Math.min(9, 2 + Math.floor(ivCombo / 2)));
+  ivBounce(party ? 0.24 : 0.10 + Math.min(0.08, ivCombo * 0.012));
+  if (ivCombo >= 2) ivComboText(x, y, ivCombo);
+
+  if (party) {
     sfxFanfare(0);
-    speakKorean(['우와!', '멋지다!', '최고야!', '신난다!'][Math.floor(Math.random() * 4)]);
+    speakKorean(['우와!', '멋지다!', '최고야!', '신난다!', '대단해!'][Math.floor(Math.random() * 5)]);
   } else {
-    sfxTone(520 + Math.random() * 420, 0, 0.12, 'triangle', 0.09);
-    sfxTone(980 + Math.random() * 300, 0.06, 0.1, 'sine', 0.05);
+    // 콤보가 오를수록 반음씩 높아지는 소리 (12단계까지)
+    var step = Math.min(12, ivCombo - 1);
+    var base = 523.25 * Math.pow(1.0595, step);
+    sfxTone(base, 0, 0.12, 'triangle', 0.09);
+    sfxTone(base * 2, 0.055, 0.1, 'sine', 0.05);
   }
 }
 function ivCount() { var n = 0, k; for (k in iv.pts) n++; return n; }
 
 $('imgview').addEventListener('pointerdown', function (ev) {
-  if (ev.target === $('imgview-x')) return;
+  if (ev.target === $('imgview-x') || ev.target === $('imgview-zoom')) return;
   ev.preventDefault();
   try { $('imgview').setPointerCapture(ev.pointerId); } catch (e) {}
   iv.pts[ev.pointerId] = { x: ev.clientX, y: ev.clientY };
@@ -5320,7 +5439,7 @@ $('imgview').addEventListener('pointermove', function (ev) {
 function ivUp(ev) {
   var had = iv.pts[ev.pointerId];
   delete iv.pts[ev.pointerId];
-  if (ivCount() < 2) iv.pinch = null;
+  if (ivCount() < 2) { iv.pinch = null; ivSyncZoomBtn(); }
   if (!had || !iv.drag) { if (ivCount() === 0) iv.drag = null; return; }
   var tapOk = !iv.drag.moved && (Date.now() - iv.drag.t) < 350;
   if (ivCount() === 0) {
@@ -5328,21 +5447,10 @@ function ivUp(ev) {
     if (!tapOk) return;
     /* 그림 바깥(어두운 곳)을 누르면 닫기 — 그림 위를 누르는 건 "놀기"로 쓴다 */
     if (!d.onImg) { closeImageView(); return; }
-    var now = Date.now();
-    if (now - iv.lastTap < 320) {           // 두 번 탭: 확대 ↔ 원래 크기
-      iv.lastTap = 0;
-      if (iv.scale > 1) { iv.scale = 1; iv.tx = 0; iv.ty = 0; }
-      else iv.scale = 2.4;
-      ivApply();
-      return;
-    }
-    iv.lastTap = now;
-    // 한 번 탭 = 반짝이 터뜨리며 놀기 (두 번 탭 확대와 겹치지 않게 살짝 기다림)
-    setTimeout(function () {
-      if (!iv.lastTap) return;              // 그 사이 두 번째 탭이 왔으면 취소
-      iv.lastTap = 0;
-      ivPlay(d.x, d.y);
-    }, 300);
+    /* 그림 위를 누르는 건 언제나 "놀기".
+       예전엔 빠르게 두 번 누르면 확대가 됐는데, 콤보로 신나게 두드리면
+       확대가 제멋대로 켜졌다 꺼져서 🔍 버튼으로 옮겼다. */
+    ivPlay(d.x, d.y);
   }
 }
 $('imgview').addEventListener('pointerup', ivUp);
