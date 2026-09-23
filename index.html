@@ -797,6 +797,14 @@
       <button class="btn ghost" id="btn-import-books">📥 책 가져오기</button>
     </div>
     <input type="file" id="import-file-input" accept="application/json,.json" hidden>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
+      <button class="btn ghost" id="btn-export-audio">🎧 음성 내보내기</button>
+      <button class="btn ghost" id="btn-import-audio">🎧 음성 가져오기</button>
+    </div>
+    <input type="file" id="audio-file-input" accept=".owlaud,application/octet-stream" hidden>
+    <p class="hint" id="audio-move-hint" style="margin-top:6px;">
+      사 둔 AI 성우 음성을 다른 휴대폰으로 옮길 때 써요. 파일이 아주 커요(책 한 권이 5~10MB).
+    </p>
     <div style="margin-top:14px;">
       <button class="btn ghost" id="btn-check-update">🔄 업데이트 확인</button>
     </div>
@@ -807,10 +815,11 @@
       브라우저가 주소마다 저장 공간을 따로 관리하기 때문이에요(책이 지워진 건 아니에요).<br><br>
       그래서 가끔 <b>📤 책 내보내기</b>로 파일 하나 저장해 두시고, 새 화면에서 안 보이면
       <b>📥 책 가져오기</b>로 그 파일을 불러오시면 그대로 복구돼요.<br><br>
-      ⚠️ <b>저장되는 것</b>: 이야기 글·제목·표지 그림·공부한 낱말 카드·API 키·설정.
-      <b>저장되지 않는 것</b>: AI 성우 음성(파일이 너무 커서요).
-      음성은 이 주소에만 남아 있어서, 다른 주소로 옮기면 책마다 한 번씩 다시 만들어야 해요.
-      그래서 <b>되도록 같은 주소를 계속 쓰시는 게</b> 제일 좋아요.
+      ⚠️ <b>책 내보내기에 담기는 것</b>: 이야기 글·제목·표지 그림·공부한 낱말 카드·API 키·설정.<br>
+      <b>AI 성우 음성은 따로예요</b> — 파일이 너무 커서 위의 <b>🎧 음성 내보내기</b>로 따로 옮겨요.
+      옮기지 않으면 기기마다 책마다 한 번씩 다시 사야 해요(돈이 또 나가요).<br><br>
+      💡 음성을 옮길 땐 <b>양쪽 성우 목소리가 같아야</b> 해요. 설정의 성우가 다르면
+      가져온 음성을 못 알아봐요.
     </p>
   </div>
 
@@ -1143,7 +1152,7 @@ if (typeof settings.pin !== 'string') settings.pin = '';
 
 // 사용량 기록 (부모가 비용을 눈으로 확인할 수 있게)
 // 휴대폰에서 어느 버전이 돌아가는지 눈으로 확인할 수 있게 함 (설정 화면에 표시)
-var APP_VERSION = '2026-09-24 (31판)';
+var APP_VERSION = '2026-09-24 (32판)';
 
 var LS_USAGE = 'owl_usage_v1';
 var usage = loadJSON(LS_USAGE, {});
@@ -6009,6 +6018,112 @@ function versionOf(html) {
   var m = String(html).match(/APP_VERSION\s*=\s*'([^']+)'/);
   return m ? m[1] : null;
 }
+
+/* ── 사 둔 음성을 다른 휴대폰으로 옮기기 ──
+   음성은 주소가 같아도 그 기기 안에만 남는다(기기마다 다시 사야 함).
+   그래서 음성 뭉치를 파일 하나로 묶어 옮길 수 있게 함.
+   글자로 바꿔 담으면(base64) 용량이 1.3배로 붇고 통째로 읽다 메모리가 터지므로,
+   소리 그대로 이어 붙인 뒤 앞머리에 "어느 위치에 무엇이 들었는지"만 적어 둔다. */
+var AUD_MAGIC = 'OWLAUD1';
+
+function saveBlobAs(blob, name) {
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(function () { try { URL.revokeObjectURL(url); } catch (e) {} }, 8000);
+}
+
+// 아이폰 사파리 옛 버전에는 blob.arrayBuffer()가 없어서 대비해 둠
+function sliceBytes(blob) {
+  if (blob.arrayBuffer) return blob.arrayBuffer();
+  return new Promise(function (resolve, reject) {
+    var fr = new FileReader();
+    fr.onload = function () { resolve(fr.result); };
+    fr.onerror = function () { reject(fr.error); };
+    fr.readAsArrayBuffer(blob);
+  });
+}
+
+$('btn-export-audio').addEventListener('click', function () {
+  openAudioDB().then(function (db) {
+    if (!db) { toast('음성 저장소를 열지 못했어요'); return; }
+    var r;
+    try { r = db.transaction('clips', 'readonly').objectStore('clips').getAll(); }
+    catch (e) { toast('음성을 읽지 못했어요'); return; }
+    r.onerror = function () { toast('음성을 읽지 못했어요'); };
+    r.onsuccess = function () {
+      var recs = r.result || [];
+      var head = [], parts = [], total = 0;
+      recs.forEach(function (x) {
+        if (!x || !x.blob || !x.blob.size) return;
+        head.push({ k: x.key, n: x.blob.size, t: x.blob.type || 'audio/wav' });
+        parts.push(x.blob);
+        total += x.blob.size;
+      });
+      if (!head.length) { toast('내보낼 음성이 없어요'); return; }
+      try {
+        var enc = new TextEncoder();
+        var hbytes = enc.encode(JSON.stringify(head));
+        var lenBuf = new ArrayBuffer(4);
+        new DataView(lenBuf).setUint32(0, hbytes.length, true);
+        var blob = new Blob([enc.encode(AUD_MAGIC), lenBuf, hbytes].concat(parts),
+                            { type: 'application/octet-stream' });
+        var verTag = (APP_VERSION.match(/\((\d+)판\)/) || [])[1] || '';
+        saveBlobAs(blob, '이야기돌고래_음성_' + (verTag ? verTag + '판_' : '') +
+                         new Date().toISOString().slice(0, 10) + '.owlaud');
+        toast('음성 ' + head.length + '조각 (' + fmtMB(total) + ')을 파일로 저장했어요 🎧', 5000);
+      } catch (e) { toast('음성 파일을 만들지 못했어요'); }
+    };
+  });
+});
+
+$('btn-import-audio').addEventListener('click', function () {
+  $('audio-file-input').value = '';
+  $('audio-file-input').click();
+});
+
+$('audio-file-input').addEventListener('change', function () {
+  var file = this.files && this.files[0];
+  if (!file) return;
+  var HEAD0 = AUD_MAGIC.length + 4;
+  toast('음성을 옮기고 있어요… 파일이 커서 조금 걸려요', 4000);
+  sliceBytes(file.slice(0, HEAD0)).then(function (buf) {
+    var u = new Uint8Array(buf);
+    var magic = '';
+    for (var i = 0; i < AUD_MAGIC.length; i++) magic += String.fromCharCode(u[i]);
+    if (magic !== AUD_MAGIC) throw new Error('not-owlaud');
+    var hlen = new DataView(buf).getUint32(AUD_MAGIC.length, true);
+    return sliceBytes(file.slice(HEAD0, HEAD0 + hlen)).then(function (hb) {
+      var head = JSON.parse(new TextDecoder().decode(hb));
+      var off = HEAD0 + hlen, i = 0, ok = 0;
+      return new Promise(function (resolve) {
+        function next() {
+          if (i >= head.length) { resolve(ok); return; }
+          var h = head[i++];
+          var part = file.slice(off, off + h.n, h.t || 'audio/wav');
+          off += h.n;
+          // 한 조각씩 차례로 넣어야 메모리가 터지지 않음
+          dbPutClip(h.k, part).then(function (res) {
+            if (res !== false) ok++;
+            next();
+          }, next);
+        }
+        next();
+      });
+    });
+  }).then(function (ok) {
+    toast('음성 ' + ok + '조각을 가져왔어요! 이제 공짜로 들을 수 있어요 🎧', 5000);
+    renderOrigin();
+  }).catch(function (e) {
+    toast(String(e && e.message) === 'not-owlaud'
+      ? '이 파일은 음성 파일이 아니에요 (.owlaud 파일을 골라 주세요)'
+      : '음성 파일을 읽지 못했어요', 4000);
+  });
+});
 
 $('btn-check-update').addEventListener('click', function () {
   var btn = this;
