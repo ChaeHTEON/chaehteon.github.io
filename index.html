@@ -1073,8 +1073,41 @@ function saveJSON(key, val) {
   try { localStorage.setItem(key, JSON.stringify(val)); return true; } catch (e) { return false; }
 }
 
-// 표지 사진 때문에 저장 공간이 찰 수 있음 → 가득 차면 오래된 표지부터 버려서 책 자체는 지켜줌
+/* ── 그림 보관 자리 ──
+   아이폰 사파리의 기본 저장소(localStorage)는 주소당 5MB뿐인데 표지 그림 한 장이 60~100KB다.
+   예전에는 그림까지 거기 넣어서, 책·낱말이 쌓이면 자리가 모자라 오래된 그림부터 조용히 버려졌다.
+   (백업 파일에도 그림이 빠져 나가는 원인이었음)
+   이제 그림은 음성과 같은 큰 저장소(IndexedDB)에 두고, 목록에는 번호(coverId)만 적는다. */
+var imgSaved = {};          // 이미 써 둔 그림 (같은 걸 또 쓰지 않으려고)
+function rememberImg(id, data) {
+  if (imgSaved[id] === data.length) return;
+  imgSaved[id] = data.length;
+  dbPutImg(id, data).then(function (ok) { if (!ok) delete imgSaved[id]; });
+}
+
+// 저장용 사본: 그림은 떼어내고 번호만 남김 (원본 목록은 그대로 그림을 들고 있음)
+function stripCovers(list, prefix) {
+  var out = [];
+  for (var i = 0; i < list.length; i++) {
+    var o = list[i];
+    if (!o.cover) { out.push(o); continue; }
+    if (!o.coverId) o.coverId = prefix + o.id;
+    rememberImg(o.coverId, o.cover);
+    var c = {};
+    for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) c[k] = o[k];
+    c.cover = null;
+    out.push(c);
+  }
+  return out;
+}
+
 function saveBooks() {
+  if (imgStoreUsable()) {
+    if (saveJSON(LS_BOOKS, stripCovers(customBooks, 'b_'))) return true;
+    toast('저장 공간이 부족해요. 설정에서 오래된 책을 지워 주세요.', 4000);
+    return false;
+  }
+  // 큰 저장소를 못 쓰는 기기에서만 예전 방식(그림을 버려서라도 책은 지킴)
   if (saveJSON(LS_BOOKS, customBooks)) return true;
   for (var i = customBooks.length - 1; i >= 0; i--) {
     if (customBooks[i].cover) {
@@ -1107,7 +1140,7 @@ if (typeof settings.pin !== 'string') settings.pin = '';
 
 // 사용량 기록 (부모가 비용을 눈으로 확인할 수 있게)
 // 휴대폰에서 어느 버전이 돌아가는지 눈으로 확인할 수 있게 함 (설정 화면에 표시)
-var APP_VERSION = '2026-09-22 (27판)';
+var APP_VERSION = '2026-09-24 (28판)';
 
 var LS_USAGE = 'owl_usage_v1';
 var usage = loadJSON(LS_USAGE, {});
@@ -1416,6 +1449,10 @@ function vocative(name) {
    카드를 누르면 성우가 읽어주고, 끝나면 “더 자세히!”로 긴 설명을 이어서 들을 수 있음.
    틀리면 다음으로 안 넘어감 — 바른 표기를 보여주고 다시 쓰게 함. */
 function saveWords() {
+  if (imgStoreUsable()) {
+    if (saveJSON(LS_WORDS, stripCovers(learnWords, 'w_'))) return true;
+    return false;
+  }
   if (saveJSON(LS_WORDS, learnWords)) return true;
   // 자리가 모자라면 오래된 카드의 그림부터 비움 (낱말·이야기는 지킴)
   for (var i = learnWords.length - 1; i >= 0; i--) {
@@ -1486,6 +1523,7 @@ function fillWordShelf(sh) {
       ev.stopPropagation();
       if (!confirm('「' + card.word + '」 카드를 지울까요? (그 낱말 음성도 같이 지워져요)')) return;
       learnWords = learnWords.filter(function (c) { return c.id !== card.id; });
+      if (card.coverId) dbDelImg(card.coverId);
       saveWords(); renderWordShelf();
       deleteAudioFor(card.story + (card.detail ? '\n\n' + card.detail : ''));
     });
@@ -2215,6 +2253,7 @@ function deleteBook(id) {
   });
   saveBooks();
   renderShelf();
+  if (gone && gone.coverId) dbDelImg(gone.coverId);
   if (gone) deleteAudioFor(gone.story).then(function () { if ($('usage-box')) renderUsage(); });
   toast('책과 그 책의 음성을 지웠어요');
 }
@@ -2833,16 +2872,118 @@ function openAudioDB() {
     if (audioDB) { resolve(audioDB); return; }
     if (audioDBFailed || !window.indexedDB) { resolve(null); return; }
     try {
-      var req = indexedDB.open('owl_audio', 1);
+      var req = indexedDB.open('owl_audio', 2);
       req.onupgradeneeded = function (e) {
         var db = e.target.result;
         if (!db.objectStoreNames.contains('clips')) {
           db.createObjectStore('clips', { keyPath: 'key' });
         }
+        if (!db.objectStoreNames.contains('imgs')) {
+          db.createObjectStore('imgs', { keyPath: 'key' });   // 표지 그림 (28판부터)
+        }
       };
       req.onsuccess = function () { audioDB = req.result; resolve(audioDB); };
       req.onerror = function () { audioDBFailed = true; resolve(null); };
     } catch (e) { audioDBFailed = true; resolve(null); }
+  });
+}
+
+function imgStoreUsable() { return !!window.indexedDB && !audioDBFailed; }
+
+function dbPutImg(key, dataUrl) {
+  return openAudioDB().then(function (db) {
+    if (!db) return false;
+    return new Promise(function (resolve) {
+      try {
+        var tx = db.transaction('imgs', 'readwrite');
+        tx.objectStore('imgs').put({ key: key, data: dataUrl });
+        tx.oncomplete = function () { resolve(true); };
+        tx.onerror = function () { resolve(false); };
+        tx.onabort = function () { resolve(false); };
+      } catch (e) { resolve(false); }
+    });
+  });
+}
+
+function dbGetImg(key) {
+  return openAudioDB().then(function (db) {
+    if (!db) return null;
+    return new Promise(function (resolve) {
+      try {
+        var r = db.transaction('imgs', 'readonly').objectStore('imgs').get(key);
+        r.onsuccess = function () { resolve((r.result && r.result.data) || null); };
+        r.onerror = function () { resolve(null); };
+      } catch (e) { resolve(null); }
+    });
+  });
+}
+
+function dbDelImg(key) {
+  if (!key) return Promise.resolve();
+  delete imgSaved[key];
+  return openAudioDB().then(function (db) {
+    if (!db) return;
+    try { db.transaction('imgs', 'readwrite').objectStore('imgs').delete(key); } catch (e) {}
+  });
+}
+
+function dbImgKeys() {
+  return openAudioDB().then(function (db) {
+    if (!db) return [];
+    return new Promise(function (resolve) {
+      try {
+        var r = db.transaction('imgs', 'readonly').objectStore('imgs').getAllKeys();
+        r.onsuccess = function () { resolve(r.result || []); };
+        r.onerror = function () { resolve([]); };
+      } catch (e) { resolve([]); }
+    });
+  });
+}
+
+/* 앱을 켜면 목록에는 그림 번호만 있으니, 큰 저장소에서 그림을 꺼내 다시 붙여준다.
+   내보내기도 이게 끝난 뒤에 해야 백업 파일에 그림이 들어간다. */
+var coversReady = null;
+function ensureCovers() {
+  if (coversReady) return coversReady;
+  if (!imgStoreUsable()) { coversReady = Promise.resolve(); return coversReady; }
+  var jobs = [];
+  function hydrate(list) {
+    list.forEach(function (o) {
+      if (o.cover || !o.coverId) return;
+      jobs.push(dbGetImg(o.coverId).then(function (d) {
+        if (d) { o.cover = d; imgSaved[o.coverId] = d.length; }
+      }));
+    });
+  }
+  hydrate(customBooks);
+  hydrate(learnWords);
+  coversReady = Promise.all(jobs).then(function () {
+    try { renderShelf(); renderWordShelf(); renderHome(); } catch (e) {}
+  });
+  return coversReady;
+}
+
+// 27판까지 쓰던 기기: 목록 안에 남아 있는 그림을 큰 저장소로 한 번만 옮김
+function migrateCovers() {
+  if (!imgStoreUsable()) return;
+  var need = false;
+  customBooks.forEach(function (b) { if (b.cover && !b.coverId) need = true; });
+  if (need) saveBooks();
+  need = false;
+  learnWords.forEach(function (c) { if (c.cover && !c.coverId) need = true; });
+  if (need) saveWords();
+}
+
+// 지운 책·낱말의 그림이 자리만 차지하지 않게 청소
+function sweepImgs() {
+  if (!imgStoreUsable()) return;
+  if (!customBooks.length && !learnWords.length) return;   // 목록을 못 읽은 상황이면 손대지 않음
+  dbImgKeys().then(function (keys) {
+    if (!keys || !keys.length) return;
+    var keep = {};
+    customBooks.forEach(function (b) { if (b.coverId) keep[b.coverId] = 1; });
+    learnWords.forEach(function (c) { if (c.coverId) keep[c.coverId] = 1; });
+    keys.forEach(function (k) { if (!keep[k]) dbDelImg(k); });
   });
 }
 
@@ -3361,7 +3502,7 @@ function runScan(b64) {
   // 같은 책을 또 찍은 거면, 이야기를 새로 만들지 않고(요금 0) 있던 책을 바로 열어줌
   if (!runScan.__checked) {
     runScan.__checked = true;
-    imageHash('data:image/jpeg;base64,' + b64).then(function (hash) {
+    imageHash('data:image/jpeg;base64,' + b64).catch(function () { return null; }).then(function (hash) {
       var dup = null;
       if (hash) {
         for (var i = 0; i < customBooks.length; i++) {
@@ -3377,12 +3518,12 @@ function runScan(b64) {
         return;
       }
       runScan.__pendingHash = hash;
-      runScan.__checked = false;
-      runScan(b64);
+      runScan(b64);   // __checked 를 켠 채로 불러야 검사를 건너뛰고 본 작업으로 감
     });
     showLoading('🔎', '찍은 책을 살펴보고 있어요…', '');
     return;
   }
+  runScan.__checked = false;        // 다음에 찍을 땐 다시 중복 검사부터
   var st = { full: '', flushed: 0, opened: false, abort: new AbortController(), epoch: newEpoch(), scanHash: runScan.__pendingHash || null };
   runScan.__pendingHash = null;
   showLoading('🐬', '돌고래가 책을 읽고 있어요…', '이야기가 준비되는 대로 바로 들려줄게요');
@@ -5793,7 +5934,13 @@ $('btn-clear-books').addEventListener('click', function () {
    브라우저는 파일 경로·주소가 바뀌면 저장 공간을 완전히 별개로 취급해서,
    앱을 새 파일/새 주소로 열면 이전에 찍은 책이 안 보임. 그때 이 파일로 복구함 */
 $('btn-export-books').addEventListener('click', function () {
-  if (!customBooks.length) { toast('내보낼 책이 없어요'); return; }
+  if (!customBooks.length && !learnWords.length) { toast('내보낼 책이 없어요'); return; }
+  // 그림은 따로 보관돼 있어서, 다 꺼낸 뒤에 만들어야 백업에 그림이 담긴다
+  toast('그림까지 챙겨서 꾸리는 중이에요… 잠시만요', 2500);
+  ensureCovers().then(doExportBooks);
+});
+
+function doExportBooks() {
   try {
     var payload = {
       app: 'story-dolphin', version: 1,
@@ -5820,11 +5967,11 @@ $('btn-export-books').addEventListener('click', function () {
     a.click();
     document.body.removeChild(a);
     setTimeout(function () { try { URL.revokeObjectURL(url); } catch (e) {} }, 3000);
-    toast('책 ' + customBooks.length + '권을 파일로 저장했어요 📤');
+    toast('책 ' + customBooks.length + '권 · 낱말 ' + learnWords.length + '개를 그림까지 저장했어요 📤', 4000);
   } catch (e) {
     toast('내보내기에 실패했어요');
   }
-});
+}
 
 $('btn-import-books').addEventListener('click', function () {
   $('import-file-input').value = '';
@@ -5850,6 +5997,7 @@ $('import-file-input').addEventListener('change', function () {
     incoming.forEach(function (b) {
       if (!b || !b.story || !b.title) return;       // 형태가 이상한 건 건너뜀
       if (!b.id || ids[b.id]) b.id = uid();          // 아이디가 겹치면 새로 발급(덮어쓰기 방지)
+      b.coverId = null;                              // 그림 번호는 이 기기에서 새로 매김
       b.builtin = false;
       if (typeof b.color !== 'number') b.color = pickBookColor();
       if (typeof b.emoji !== 'string' || !b.emoji) b.emoji = '📖';
@@ -5869,6 +6017,7 @@ $('import-file-input').addEventListener('change', function () {
       data.words.forEach(function (c) {
         if (!c || !c.word || !c.story || have[c.word]) return;
         if (!c.id) c.id = uid();
+        c.coverId = null;
         learnWords.push(c);
         have[c.word] = 1;
         addedWords++;
@@ -5911,6 +6060,8 @@ applyAppMode();    // 저장된 모드(이야기/공부)로 홈 화면을 맞춤
                    // ※ 반드시 여기(모든 정의가 끝난 뒤)서 불러야 함.
                    //    예전에 스크립트 중간에서 불렀다가 아직 안 만들어진 걸 건드려 앱 시작이 통째로 죽은 적 있음
 initStorage();     // 저장 공간 확보 (음성 보관용)
+migrateCovers();   // 예전 판에서 목록에 들어 있던 그림을 큰 저장소로 옮김
+ensureCovers().then(sweepImgs);   // 보관해 둔 그림을 목록에 다시 붙이고, 주인 없는 그림은 청소
 rolloverUsage();   // 달이 바뀌었으면 시작할 때 바로 한도 초기화
 renderHome();
 renderShelf();
