@@ -1140,7 +1140,7 @@ if (typeof settings.pin !== 'string') settings.pin = '';
 
 // 사용량 기록 (부모가 비용을 눈으로 확인할 수 있게)
 // 휴대폰에서 어느 버전이 돌아가는지 눈으로 확인할 수 있게 함 (설정 화면에 표시)
-var APP_VERSION = '2026-09-24 (29판)';
+var APP_VERSION = '2026-09-24 (30판)';
 
 var LS_USAGE = 'owl_usage_v1';
 var usage = loadJSON(LS_USAGE, {});
@@ -5380,6 +5380,17 @@ function fmtMB(bytes) {
   return (mb < 10 ? mb.toFixed(1) : mb.toFixed(0)) + 'MB';
 }
 
+/* 아이폰은 같은 주소라도 '사파리에서 연 것'과 '홈 화면 아이콘으로 연 것'의
+   저장 공간을 완전히 따로 둔다. 그래서 한쪽에서 만든 책이 다른 쪽에는 안 보임.
+   어느 쪽에 있는지 몰라서 "책이 사라졌다"고 오해하기 쉬워, 진단에 그대로 보여준다. */
+function openedIn() {
+  try {
+    if (window.navigator.standalone === true) return '홈 화면 앱';
+    if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) return '홈 화면 앱';
+  } catch (e) {}
+  return '사파리(브라우저)';
+}
+
 function renderOrigin() {
   var box = $('origin-box');
   if (!box) return;
@@ -5388,9 +5399,13 @@ function renderOrigin() {
   var keys = apiKeys().length;
   var rows = [
     '현재 주소: <b>' + host + '</b>',
+    '열린 곳: <b>' + openedIn() + '</b>' +
+      ' <span style="font-size:12px;">(아이폰은 홈 화면 앱과 사파리의 책을 따로 저장해요)</span>',
     '앱 버전: <b>' + APP_VERSION + '</b>',
     'API 키: <b>' + (keys ? keys + '개 들어있음' : '없음 (성우·사진찍기 안 됨)') + '</b>',
-    '책장: 기본 ' + BUILTIN_BOOKS.length + '권 + 내 책 <b>' + customBooks.length + '권</b>',
+    '책장: 기본 ' + BUILTIN_BOOKS.length + '권 + 내 책 <b>' + customBooks.length + '권</b>' +
+      ' · 공부 낱말 <b>' + learnWords.length + '개</b>',
+    '<span id="diag-imgs">저장된 그림: 세는 중…</span>',
     '목소리: <b>' + (settings.voiceMode === 'ai' ? 'AI 성우' : '기기 목소리') + '</b>',
     '성우 모델: <b>' + ttsModel() + '</b>' +
       (deadModels[ttsModel()] ? ' <span style="color:#D9534F;">(안 됨으로 표시됨)</span>' : ''),
@@ -5409,6 +5424,16 @@ function renderOrigin() {
   audioDBSize().then(function (bytes) {
     var el = $('diag-audio');
     if (el) el.innerHTML = '저장된 음성: <b>' + (bytes ? fmtMB(bytes) : '없음') + '</b>';
+  });
+  dbImgKeys().then(function (keys) {
+    var el = $('diag-imgs');
+    if (!el) return;
+    var n = (keys || []).length;
+    var want = 0;
+    customBooks.forEach(function (b) { if (b.cover || b.coverId) want++; });
+    learnWords.forEach(function (c) { if (c.cover || c.coverId) want++; });
+    el.innerHTML = '저장된 그림: <b>' + n + '장</b>' +
+      (want > n ? ' <span style="color:#D9534F;">(' + (want - n) + '장 빠짐 — 백업 가져오기로 되살릴 수 있어요)</span>' : '');
   });
 }
 
