@@ -178,6 +178,8 @@
   body.learn-compact .home-hi { font-size: 19px; margin: 0 0 6px; }
   body.learn-compact #learn-sub { display: none; }
   body.learn-compact .mode-seg { margin-bottom: 8px; }
+  /* 주제 줄을 화면 맨 위까지 올리려면 아래로 더 밀 자리가 있어야 함 */
+  body.learn-compact #home-learn { padding-bottom: 260px; }
   .trace-row { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-bottom: 8px; }
   .tchip {
     font-family: var(--font-ui); font-size: 14px; padding: 8px 13px;
@@ -1253,7 +1255,7 @@ if (typeof settings.pin !== 'string') settings.pin = '';
 
 // 사용량 기록 (부모가 비용을 눈으로 확인할 수 있게)
 // 휴대폰에서 어느 버전이 돌아가는지 눈으로 확인할 수 있게 함 (설정 화면에 표시)
-var APP_VERSION = '2026-09-24 (35판)';
+var APP_VERSION = '2026-09-24 (36판)';
 
 var LS_USAGE = 'owl_usage_v1';
 var usage = loadJSON(LS_USAGE, {});
@@ -2049,9 +2051,31 @@ var JAMO_STROKES = {
   'ㅡ': [[[0.08, 0.50], [0.92, 0.50]]],
   'ㅣ': [[[0.50, 0.06], [0.50, 0.94]]]
 };
+/* 겹모음 — 기본 모음을 이어 쓰는 순서 그대로 (ㅐ = ㅏ 쓰고 ㅣ 하나 더) */
+JAMO_STROKES['ㅐ'] = [[[0.30, 0.06], [0.30, 0.94]], [[0.30, 0.50], [0.66, 0.50]],
+                      [[0.74, 0.06], [0.74, 0.94]]];
+JAMO_STROKES['ㅔ'] = [[[0.06, 0.50], [0.40, 0.50]], [[0.40, 0.06], [0.40, 0.94]],
+                      [[0.74, 0.06], [0.74, 0.94]]];
+JAMO_STROKES['ㅒ'] = [[[0.30, 0.06], [0.30, 0.94]], [[0.30, 0.34], [0.66, 0.34]],
+                      [[0.30, 0.66], [0.66, 0.66]], [[0.74, 0.06], [0.74, 0.94]]];
+JAMO_STROKES['ㅖ'] = [[[0.06, 0.34], [0.40, 0.34]], [[0.06, 0.66], [0.40, 0.66]],
+                      [[0.40, 0.06], [0.40, 0.94]], [[0.74, 0.06], [0.74, 0.94]]];
 JAMO_STROKES['ㅇ'] = [circlePoly(0.50, 0.50, 0.36)];
 JAMO_STROKES['ㅎ'] = [[[0.50, 0.02], [0.50, 0.14]], [[0.16, 0.24], [0.84, 0.24]],
                       circlePoly(0.50, 0.64, 0.27)];
+
+/* 쌍자음(ㄲㄸㅃㅆㅉ)은 같은 자음을 좌우로 두 번 — 기본 획을 반씩 줄여 두 벌 */
+['ㄲㄱ', 'ㄸㄷ', 'ㅃㅂ', 'ㅆㅅ', 'ㅉㅈ'].forEach(function (pair) {
+  var base = JAMO_STROKES[pair.charAt(1)];
+  if (!base) return;
+  var out = [];
+  [0, 1].forEach(function (k) {
+    base.forEach(function (poly) {
+      out.push(poly.map(function (pt) { return [pt[0] * 0.46 + k * 0.54, pt[1]]; }));
+    });
+  });
+  JAMO_STROKES[pair.charAt(0)] = out;
+});
 
 var CHO_LIST = 'ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ';
 function hangulParts(ch) {
@@ -2077,13 +2101,14 @@ function glyphMask(ch, fs) {
     x.fillText(ch, w / 2, h / 2);
     var d = x.getImageData(0, 0, w, h).data;
     var cols = [], rows = [], i;
+    var bits = new Uint8Array(w * h);
     for (i = 0; i < w; i++) cols.push(0);
     for (i = 0; i < h; i++) rows.push(0);
     var minX = w, maxX = -1, minY = h, maxY = -1;
     for (var y = 0; y < h; y++) {
       for (var xx = 0; xx < w; xx++) {
         if (d[(y * w + xx) * 4 + 3] > 40) {
-          cols[xx]++; rows[y]++;
+          cols[xx]++; rows[y]++; bits[y * w + xx] = 1;
           if (xx < minX) minX = xx;
           if (xx > maxX) maxX = xx;
           if (y < minY) minY = y;
@@ -2092,7 +2117,8 @@ function glyphMask(ch, fs) {
       }
     }
     if (maxX < 0) return null;
-    return { cw: w, ch: h, cols: cols, rows: rows, minX: minX, maxX: maxX, minY: minY, maxY: maxY };
+    return { cw: w, ch: h, cols: cols, rows: rows, bits: bits,
+             minX: minX, maxX: maxX, minY: minY, maxY: maxY };
   } catch (e) { return null; }
 }
 
@@ -2116,44 +2142,95 @@ var JONG_LIST = ' ㄱㄲㄳㄴㄵㄶㄷㄹㄺㄻㄼㄽㄾㄿㅀㅁㅂㅄㅅㅆ�
 var JUNG_RIGHT = { 0:1, 1:1, 2:1, 3:1, 4:1, 5:1, 6:1, 7:1, 20:1 };
 var JUNG_DOWN = { 8:1, 12:1, 13:1, 17:1, 18:1 };
 
-/* 글자 한 칸을 자모 자리로 나눈다 — 초성은 왼쪽(또는 위), 중성은 오른쪽(또는 아래), 받침은 맨 아래.
-   글꼴이 그린 모양과 완벽히 같진 않지만, "어디서 시작해 어느 쪽으로 긋는지"를 보여주기엔 충분하다. */
-function syllableBoxes(p, bx, mask) {
+/* 겹모음은 "아래에 붙는 것 + 오른쪽에 붙는 것"으로 이루어진다 (ㅘ = ㅗ + ㅏ) */
+var JUNG_COMPLEX = {
+  9: ['ㅗ', 'ㅏ'], 10: ['ㅗ', 'ㅐ'], 11: ['ㅗ', 'ㅣ'],
+  14: ['ㅜ', 'ㅓ'], 15: ['ㅜ', 'ㅔ'], 16: ['ㅜ', 'ㅣ'], 19: ['ㅡ', 'ㅣ']
+};
+
+/* 자모 사이를 가를 자리. 빈 틈이 있으면 그 틈을 쓰고,
+   없으면(ㄱ과 ㅗ가 맞붙은 「곰」처럼) 한글이 보통 그렇게 생긴 비율로 나눈다.
+   ※ "잉크가 가장 적은 줄"로 나눠 봤더니 ㄱ의 가는 세로획에서 잘려
+      ㄱ이 납작해졌다. 비율이 훨씬 안전하다. */
+function splitPoint(arr, from, to, fallback) {
+  if (from > to) return null;
+  var g = findGap(arr, from, to);
+  if (g) return g;
+  var f = Math.round(fallback);
+  if (f < from) f = from;
+  if (f > to) f = to;
+  return { s: f, e: f, len: 1 };
+}
+
+// 일부 세로 구간만 보고 가로 틈을 찾을 때 쓰는 줄별 점 개수
+function rowsIn(mask, x0, x1) {
+  var out = [], y, xx;
+  for (y = 0; y < mask.ch; y++) {
+    var n = 0;
+    for (xx = x0; xx <= x1; xx++) if (mask.bits[y * mask.cw + xx]) n++;
+    out.push(n);
+  }
+  return out;
+}
+
+/* 글자 한 칸을 자모 자리로 나눠 "쓰는 순서대로" 돌려준다.
+   자리는 글꼴이 실제로 찍은 픽셀의 빈 틈을 찾아 가른다. */
+function syllableParts(p, bx, mask) {
   if (!mask) return null;
   var kx = bx.w / Math.max(1, mask.maxX - mask.minX + 1);
   var ky = bx.h / Math.max(1, mask.maxY - mask.minY + 1);
   function toX(px) { return bx.l + (px - mask.minX) * kx; }
   function toY(py) { return bx.t + (py - mask.minY) * ky; }
-  var out = {};
-  var bodyBottom = mask.maxY;
+  function box(x0, x1, y0, y1) {
+    return { l: toX(x0), t: toY(y0),
+             w: Math.max(1, toX(x1) - toX(x0) + kx),
+             h: Math.max(1, toY(y1) - toY(y0) + ky) };
+  }
+  var cho = CHO_LIST.charAt(p.cho);
+  var jong = p.jong ? JONG_LIST.charAt(p.jong) : '';
+  var out = [], jongBox = null;
+  var bodyTop = mask.minY, bodyBottom = mask.maxY;
+  var h0 = mask.maxY - mask.minY + 1, w0 = mask.maxX - mask.minX + 1;
 
-  // 받침이 있으면, 아래쪽에서 가로로 끊긴 자리를 찾아 몸통과 받침을 가른다
+  // 받침이 있으면 아래쪽 가로 틈에서 몸통과 받침을 가른다
   if (p.jong) {
-    var h0 = mask.maxY - mask.minY + 1;
-    var g = findGap(mask.rows, mask.minY + Math.round(h0 * 0.40), mask.maxY - Math.round(h0 * 0.12));
+    var g = splitPoint(mask.rows, mask.minY + Math.round(h0 * 0.40), mask.maxY - Math.round(h0 * 0.12),
+                       mask.minY + h0 * 0.70);
     if (!g) return null;
     bodyBottom = g.s - 1;
-    out.jong = { l: bx.l, t: toY(g.e + 1), w: bx.w, h: toY(mask.maxY) - toY(g.e + 1) + ky };
+    jongBox = box(mask.minX, mask.maxX, g.e + 1, mask.maxY);
   }
-  var bodyTop = mask.minY;
+  var hb = bodyBottom - bodyTop + 1;
+
   if (JUNG_RIGHT[p.jung]) {
-    // 초성 | 중성 을 세로로 끊긴 자리에서 가른다
-    var w0 = mask.maxX - mask.minX + 1;
-    var gc = findGap(mask.cols, mask.minX + Math.round(w0 * 0.20), mask.maxX - Math.round(w0 * 0.12));
+    var gc = splitPoint(mask.cols, mask.minX + Math.round(w0 * 0.20), mask.maxX - Math.round(w0 * 0.12),
+                        mask.minX + w0 * 0.47);
     if (!gc) return null;
-    out.cho = { l: bx.l, t: toY(bodyTop), w: toX(gc.s) - bx.l, h: toY(bodyBottom) - toY(bodyTop) + ky };
-    out.jung = { l: toX(gc.e + 1), t: toY(bodyTop), w: toX(mask.maxX) - toX(gc.e + 1) + kx,
-                 h: toY(bodyBottom) - toY(bodyTop) + ky };
+    out.push({ j: cho, box: box(mask.minX, gc.s - 1, bodyTop, bodyBottom) });
+    out.push({ j: JUNG_LIST.charAt(p.jung), box: box(gc.e + 1, mask.maxX, bodyTop, bodyBottom) });
   } else if (JUNG_DOWN[p.jung]) {
-    // 초성 위 / 중성 아래 를 가로로 끊긴 자리에서 가른다
-    var hb = bodyBottom - bodyTop + 1;
-    var gr = findGap(mask.rows, bodyTop + Math.round(hb * 0.25), bodyBottom - Math.round(hb * 0.15));
+    var gr = splitPoint(mask.rows, bodyTop + Math.round(hb * 0.25), bodyBottom - Math.round(hb * 0.15),
+                        bodyTop + hb * 0.55);
     if (!gr) return null;
-    out.cho = { l: bx.l, t: toY(bodyTop), w: bx.w, h: toY(gr.s) - toY(bodyTop) };
-    out.jung = { l: bx.l, t: toY(gr.e + 1), w: bx.w, h: toY(bodyBottom) - toY(gr.e + 1) + ky };
+    out.push({ j: cho, box: box(mask.minX, mask.maxX, bodyTop, gr.s - 1) });
+    out.push({ j: JUNG_LIST.charAt(p.jung), box: box(mask.minX, mask.maxX, gr.e + 1, bodyBottom) });
+  } else if (JUNG_COMPLEX[p.jung] && mask.bits) {
+    // 왼쪽(초성 + 아래모음) | 오른쪽(세로모음) 으로 가른 뒤, 왼쪽을 다시 위아래로
+    var gc2 = splitPoint(mask.cols, mask.minX + Math.round(w0 * 0.34), mask.maxX - Math.round(w0 * 0.08),
+                         mask.minX + w0 * 0.62);
+    if (!gc2) return null;
+    var gr2 = splitPoint(rowsIn(mask, mask.minX, gc2.s - 1),
+                         bodyTop + Math.round(hb * 0.20), bodyBottom - Math.round(hb * 0.12),
+                         bodyTop + hb * 0.52);
+    if (!gr2) return null;
+    var cp = JUNG_COMPLEX[p.jung];
+    out.push({ j: cho, box: box(mask.minX, gc2.s - 1, bodyTop, gr2.s - 1) });
+    out.push({ j: cp[0], box: box(mask.minX, gc2.s - 1, gr2.e + 1, bodyBottom) });
+    out.push({ j: cp[1], box: box(gc2.e + 1, mask.maxX, bodyTop, bodyBottom) });
   } else {
-    return null;   // ㅘ·ㅚ 같은 겹모음은 조립 단계로 보여줌
+    return null;
   }
+  if (jong) out.push({ j: jong, box: jongBox });
   return out;
 }
 
@@ -2168,15 +2245,20 @@ function charStrokePlan(ch, bx, mask) {
     }
     return [{ kind: 'glyph', glyph: ch, box: bx }];
   }
-  var boxes = syllableBoxes(p, bx, mask);
-  var cho = CHO_LIST.charAt(p.cho);
-  var jung = JUNG_LIST.charAt(p.jung);
-  var jong = p.jong ? JONG_LIST.charAt(p.jong) : '';
-  if (boxes && JAMO_STROKES[cho] && JAMO_STROKES[jung] && (!jong || JAMO_STROKES[jong])) {
+  var parts = syllableParts(p, bx, mask);
+  var known = !!parts;
+  if (known) {
+    for (var q = 0; q < parts.length; q++) {
+      if (!JAMO_STROKES[parts[q].j]) { known = false; break; }
+    }
+  }
+  if (known) {
     var out = [];
-    JAMO_STROKES[cho].forEach(function (poly) { out.push({ kind: 'poly', poly: poly, box: boxes.cho }); });
-    JAMO_STROKES[jung].forEach(function (poly) { out.push({ kind: 'poly', poly: poly, box: boxes.jung }); });
-    if (jong) JAMO_STROKES[jong].forEach(function (poly) { out.push({ kind: 'poly', poly: poly, box: boxes.jong }); });
+    parts.forEach(function (pt) {
+      JAMO_STROKES[pt.j].forEach(function (poly) {
+        out.push({ kind: 'poly', poly: poly, box: pt.box });
+      });
+    });
     return out;
   }
   // 모르는 자모가 있으면 조립 단계로 (초성만 따로 크게 그리면 어긋나서 생략)
@@ -2326,11 +2408,14 @@ function padCanvas() { return $('learn-pad'); }
    사파리는 주소창이 나타났다 사라지며 높이가 바뀌어서 vh 값만으로는 어긋난다. */
 /* 쓰기판이 화면 위쪽에 오도록 살짝 올려준다 (여백을 줄여도 모자랄 때를 위한 보조) */
 function scrollPadIntoView(useKb) {
-  var el = useKb ? $('learn-kb') : $('pad-wrap');
+  /* 주제·단계 줄(연필·소리 아이콘 바로 위)이 화면 맨 위에 오게 올린다.
+     그래야 아래쪽 "다 썼어요" 버튼까지 한 화면에 들어온다. */
+  var tag = $('pad-tag');
+  var el = useKb ? $('learn-kb') : ((tag && tag.textContent) ? tag : $('pad-wrap'));
   if (!el) return;
   var top = el.getBoundingClientRect().top;
-  if (top <= 76) return;                       // 이미 잘 보이면 그대로
-  var y = top + (window.pageYOffset || 0) - 10;
+  if (top >= 0 && top <= 16) return;           // 이미 맨 위면 그대로
+  var y = top + (window.pageYOffset || 0) - 6;
   try { window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' }); }
   catch (e) { window.scrollTo(0, Math.max(0, y)); }
 }
@@ -2343,7 +2428,7 @@ function fitPadHeight() {
   if (!hl || hl.hidden) return;
   var vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight || 700;
   var used = 0;
-  ['trace-row', 'pad-tag', 'pad-head'].forEach(function (id) {
+  ['pad-tag', 'pad-head'].forEach(function (id) {
     var e = $(id);
     if (e && !e.hidden) used += e.getBoundingClientRect().height + 6;
   });
